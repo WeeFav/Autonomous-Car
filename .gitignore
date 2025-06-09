@@ -1,0 +1,5 @@
+*.blend
+*.blend1
+.vscode/
+schematic/
+STL files/
