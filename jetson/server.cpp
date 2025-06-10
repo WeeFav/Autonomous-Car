@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <string>
+#include <opencv2/opencv.hpp>
 
 int main() {
     // create listening socket
@@ -57,25 +58,47 @@ int main() {
     // close listening socket (don't recieve other clients)
     close(listen_socket);
 
-    // while loop: accept and echo message back to client
-    char buf[4096];
-    std::string user_input;
+    // Start sending
 
+    // GStreamer pipeline string for the Raspberry Pi camera on Jetson Nano
+    std::string pipeline = "nvarguscamerasrc sensor-id=0 ! "
+                           "video/x-raw(memory:NVMM), width=1280, height=720, format=NV12, framerate=8/1 ! "
+                           "nvvidconv flip-method=2 ! "
+                           "video/x-raw, format=BGRx ! "
+                           "videoconvert ! "
+                           "video/x-raw, format=BGR ! appsink";
+
+    // OpenCV video capture object
+    cv::VideoCapture cap(pipeline, cv::CAP_GSTREAMER);
+    if (!cap.isOpened()) {
+        std::cerr << "Error: Could not open camera." << std::endl;
+        return -1;
+    }
+
+    cv::Mat frame;
+    int counter = 0;
     while (true) {
-        // send to client
-        std::cout << "> ";
-        getline(std::cin, user_input);
-        int send_res = send(sock, user_input.c_str(), user_input.size() + 1, 0);
-        if (send_res == -1) {
-            std::cout << "Could not send to client" << std::endl;
-            continue;
+        // read image
+        cap >> frame;
+        if (frame.empty()) {
+            std::cerr << "Error: Blank frame grabbed." << std::endl;
+            break;
         }
 
-        // wait for client echo
-        memset(buf, 0, 4096);
-        int bytes_received = recv(sock, buf, 4096, 0);
-        std::cout << "Client: " << std::string(buf, bytes_received) << std::endl;
+        // Encode image as JPEG
+        std::vector<uchar> buf;
+        cv::imencode(".jpg", frame, buf);
 
+        // send image size
+        uint32_t img_size = buf.size();
+        uint32_t img_size_net = htonl(img_size); // Convert to network byte order
+        send(sock, &img_size_net, sizeof(img_size_net), 0);
+
+        // send image
+        send(sock, buf.data(), img_size, 0);
+
+        std::cout << "Send frame " << std::to_string(counter) << std::endl;
+        counter++;
     }
 
     // close socket
