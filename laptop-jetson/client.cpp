@@ -36,18 +36,22 @@ int main() {
     std::string user_input;
 
     while (true) {
-        std::cout << "> ";
-        getline(std::cin, user_input);
-        int send_res = send(client_fd, user_input.c_str(), user_input.size() + 1, 0);
-        if (send_res == -1) {
-            std::cout << "Could not send to server" << std::endl;
-            continue;
+        // wait for server to send data
+        int bytes_received = recv(client_socket, buf, 4096, 0);
+        if (bytes_received < 0) {
+            std::cerr << "Error in recv()" << std::endl;
+            break;
+        }
+        if (bytes_received == 0) {
+            std::cout << "Server disconnected" << std::endl;
+            break;
         }
 
-        memset(buf, 0, 4096);
-        int bytes_received = recv(client_fd, buf, 4096, 0);
+        // display
+        std::cout << "Server: " << std::string(buf, 0, bytes_received) << std::endl;
 
-        std::cout << "Server> " << std::string(buf, bytes_received) << std::endl;
+        // echo message back
+        send(client_socket, buf, bytes_received + 1, 0);
     }
 
     
