@@ -3,3 +3,6 @@
 .vscode/
 schematic/
 STL files/
+
+laptop/build/
+jetson/build
