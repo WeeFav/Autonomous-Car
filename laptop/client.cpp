@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <string>
+#include <opencv2/opencv.hpp>
 
 int main() {
     // create socket
@@ -16,7 +17,7 @@ int main() {
     }
 
     // define server ip and port
-    std::string ip_address = "127.0.0.1"; // server's ip
+    std::string ip_address = "192.168.0.106"; // server's ip
     int port = 8000; // server's port
     sockaddr_in server_addr; // structure to hold the ip address and port for the socket connection
     server_addr.sin_family = AF_INET; // ipv4
@@ -31,30 +32,36 @@ int main() {
         return 1;
     }
 
-    // while loop:
-    char buf[4096];
-    std::string user_input;
+    // Start receive
 
     while (true) {
-        // wait for server to send data
-        int bytes_received = recv(sock, buf, 4096, 0);
-        if (bytes_received < 0) {
-            std::cerr << "Error in recv()" << std::endl;
-            break;
-        }
-        if (bytes_received == 0) {
-            std::cout << "Server disconnected" << std::endl;
-            break;
+        // receive image size
+        uint32_t img_size_net;
+        recv(sock, &img_size_net, sizeof(img_size_net), 0);
+        uint32_t img_size = ntohl(img_size_net); // convert from network byte to local byte order
+
+        // receive image
+        std::vector<uchar> buf(img_size);
+        size_t bytes_received = 0;
+        while (bytes_received < img_size) {
+            ssize_t bytes = recv(sock, buf.data() + bytes_received, img_size - bytes_received, 0);
+            if (bytes <= 0) {
+                break;
+            }
+            bytes_received += bytes;
         }
 
-        // display
-        std::cout << "Server: " << std::string(buf, 0, bytes_received) << std::endl;
-
-        // echo message back
-        send(sock, buf, bytes_received + 1, 0);
+        // decode image
+        cv::Mat img = cv::imdecode(buf, cv::IMREAD_COLOR);
+        if (img.empty()) {
+            std::cerr << "Failed to decode image\n";
+        }
+        else {
+            cv::imshow("Received Image", img);
+            cv::waitKey(1);
+        }
     }
 
-    
     close(sock);
     return 0;
 }
