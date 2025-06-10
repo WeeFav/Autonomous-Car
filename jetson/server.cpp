@@ -8,34 +8,35 @@
 #include <string>
 
 int main() {
-    // create socket
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == -1) {
+    // create listening socket
+    int listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_socket == -1) {
         std::cerr << "Socket creation failed.\n";
         return 1;
     }
 
-    // bind socket to ip and port
+    // bind listening socket to server ip and port
     sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(8000);
-    if (bind(server_fd, (sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+    if (bind(listen_socket, (sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
         std::cerr << "Bind failed.\n";
-        close(server_fd);
+        close(listen_socket);
         return 1;
     }
 
     // tell the socket is for listening
-    listen(server_fd, SOMAXCONN);
+    listen(listen_socket, SOMAXCONN);
 
-    // wait for connection
+    // define client ip and port structure
     sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    int client_socket = accept(server_fd, (sockaddr*)&client_addr, &client_len);
-    if (client_socket == -1) {
+    // wait for connection
+    int sock = accept(listen_socket, (sockaddr*)&client_addr, &client_len);
+    if (sock == -1) {
         std::cerr << "Accept failed.\n";
-        close(server_fd);
+        close(listen_socket);
         return 1;
     }
 
@@ -54,7 +55,7 @@ int main() {
     }
 
     // close listening socket (don't recieve other clients)
-    close(server_fd);
+    close(listen_socket);
 
     // while loop: accept and echo message back to client
     char buf[4096];
@@ -64,21 +65,21 @@ int main() {
         // send to client
         std::cout << "> ";
         getline(std::cin, user_input);
-        int send_res = send(client_fd, user_input.c_str(), user_input.size() + 1, 0);
+        int send_res = send(sock, user_input.c_str(), user_input.size() + 1, 0);
         if (send_res == -1) {
-            std::cout << "Could not send to server" << std::endl;
+            std::cout << "Could not send to client" << std::endl;
             continue;
         }
 
         // wait for client echo
         memset(buf, 0, 4096);
-        int bytes_received = recv(client_fd, buf, 4096, 0);
+        int bytes_received = recv(sock, buf, 4096, 0);
         std::cout << "Client: " << std::string(buf, bytes_received) << std::endl;
 
     }
 
     // close socket
-    close(client_socket);
+    close(sock);
 
     return 0;
 }
