@@ -31,6 +31,7 @@ int gap_event_handler(struct ble_gap_event *event, void *arg);
 void ble_store_config_init(void);
 int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_svc *service, void *arg);
 int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg);
+int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
 
 void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
@@ -135,14 +136,44 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
                 rc = ble_gap_conn_find(conn_handle, &desc);
                 assert(rc == 0);
 
-                /* Perform service discovery */
-                ble_gattc_disc_all_svcs(conn_handle, disc_svc_cb, NULL);
+                /** Initiate security - It will perform
+                    * Pairing (Exchange keys)
+                    * Bonding (Store keys)
+                    * Encryption (Enable encryption)
+                    * Will invoke event BLE_GAP_EVENT_ENC_CHANGE
+                **/
+                rc = ble_gap_security_initiate(conn_handle);
+                if (rc != 0) {
+                    ESP_LOGE(TAG, "Security could not be initiated, rc = %d", rc);
+                    return ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+                } 
+                else {
+                    ESP_LOGI(TAG, "Connection secured");
+                }
             } 
             else {
                 /* Connection attempt failed; resume scanning. */
                 ESP_LOGE(TAG, "Error: Connection failed; status=%d\n", event->connect.status);
                 start_scan();
             }
+
+            break;
+
+        case BLE_GAP_EVENT_ENC_CHANGE:
+            ESP_LOGI(TAG, "Encryption change; status=%d", event->enc_change.status);
+
+            if (event->enc_change.status == 0) {
+                // Make sure connection is found after encryption
+                rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
+                assert(rc == 0);
+
+                /* Perform service discovery after encryption has been successfully enabled */
+                ble_gattc_disc_all_svcs(conn_handle, disc_svc_cb, NULL);
+            }
+            else {
+                ESP_LOGE(TAG, "The encryption state change attempt failed; status=%d\n", event->connect.status);
+            }
+
             break;
     }
 
@@ -152,7 +183,7 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
 int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_svc *service, void *arg) {
     switch (error->status) {
         case 0:
-            ESP_LOGI(TAG, "Service discovered: UUID=%04x, start_handle=%d, end_handle=%d", 
+            ESP_LOGI(TAG, "Service discovered: UUID=0x%04x, start_handle=%d, end_handle=%d", 
                     ble_uuid_u16(&service->uuid.u), service->start_handle, service->end_handle);
             
             // If this is the HID service, discover characteristics
@@ -178,13 +209,41 @@ int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const 
 int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg) {
     switch (error->status) {
         case 0:
+            ESP_LOGI(TAG, "Characteristic discovered: UUID=0x%04x, handle=%d, value_handle=%d, properties=0x%X", 
+                    ble_uuid_u16(&chr->uuid.u), chr->def_handle, chr->val_handle, chr->properties);
+
+            // Read Report Map
+            if (ble_uuid_u16(&chr->uuid.u) == XBOX_REPORT_MAP_UUID) {
+                ble_gattc_read(conn_handle, chr->val_handle, report_map_read_cb, NULL);
+            }
+
             break;
         case BLE_HS_EDONE:
+            ESP_LOGI(TAG, "All characteristics discovered");
             break;
         default:
+            ESP_LOGE(TAG, "Characteristic discovery failed: %d", error->status);
             break;
     }
     
+    return 0;
+}
+
+int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg) {
+    if (error->status == 0 && attr != NULL) {
+        ESP_LOGI(TAG, "Report Map length: %d", attr->om->om_len);
+        
+        uint8_t *data = attr->om->om_data;
+        for (int i = 0; i < attr->om->om_len; i++) {
+            printf("%02X ", data[i]);
+        }
+        printf("\n");
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to read Report Map: %d", error->status);
+
+    }
+
     return 0;
 }
 
@@ -209,8 +268,7 @@ void app_main(void) {
     /* NimBLE stack initialization */
     ret = nimble_port_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to initialize nimble stack, error code: %d ",
-                 ret);
+        ESP_LOGE(TAG, "failed to initialize nimble stack, error code: %d ", ret);
         return;
     }
 
@@ -221,8 +279,7 @@ void app_main(void) {
     int rc = 0;
     rc = ble_svc_gap_device_name_set("ESP32-Xbox-Client");
     if (rc != 0) {
-        ESP_LOGE(TAG, "failed to set device name to %s, error code: %d",
-                 "ESP32-Xbox-Client", rc);
+        ESP_LOGE(TAG, "failed to set device name to %s, error code: %d", "ESP32-Xbox-Client", rc);
         return;
     }
 
@@ -231,6 +288,13 @@ void app_main(void) {
     ble_hs_cfg.reset_cb = on_stack_reset; // Called when BLE host resets
     ble_hs_cfg.sync_cb = on_stack_sync; // Called when BLE host syncs with controller
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr; // For BLE store operations
+
+    // --- Configure BLE security properties ---
+    ble_hs_cfg.sm_io_cap = 0;  // Typically for Just Works
+    ble_hs_cfg.sm_bonding = 1; // Enable bonding (store keys for future reconnections)
+    ble_hs_cfg.sm_mitm = 0;    // No Man-In-The-Middle protection (for Just Works)
+    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID; // Distribute Encryption and Identity keys
+    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID; // Accept Encryption and Identity keys from peer
 
     /* Store host configuration */
     ble_store_config_init();
