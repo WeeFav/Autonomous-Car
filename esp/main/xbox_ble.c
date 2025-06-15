@@ -15,29 +15,12 @@
 #include "sdkconfig.h"
 #include "store/config/ble_store_config.h"
 #include "xbox_ble.h"
-
-// Xbox Wireless Controller Service UUIDs
-#define XBOX_SERVICE_UUID           0x1812  // HID Service
-#define XBOX_REPORT_UUID            0x2A4D  // Report Characteristic
-#define XBOX_REPORT_MAP_UUID        0x2A4B  // Report Map
-#define XBOX_HID_INFO_UUID          0x2A4A  // HID Information
-#define XBOX_CONTROL_POINT_UUID     0x2A4C  // HID Control Point
-#define XBOX_CCCD_UUID              0x2902  // CCCD
+#include "utils.h"
 
 static const char *TAG = "xbox_ble";
 uint16_t conn_handle;
 uint16_t end_handle = 32;
-
-/* Function declaration */
-void start_scan(void);
-int gap_event_handler(struct ble_gap_event *event, void *arg);
-void ble_store_config_init(void);
-int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_svc *service, void *arg);
-int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg);
-int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg);
-// int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
-int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
-void format_xbox_report(char *output, const xbox_report_payload_t *report);
+xbox_report_payload_t prev = {0};
 
 void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
@@ -184,14 +167,14 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
             break;
 
         case BLE_GAP_EVENT_NOTIFY_RX:
-            ESP_LOGI(TAG, "Notification received on handle: %d", event->notify_rx.attr_handle);
-            uint16_t len = event->notify_rx.om->om_len;
-            ESP_LOGI(TAG, "Data length: %d", len);
-
+            // Process only if the notification comes from xbox HID
             if (event->notify_rx.attr_handle == 30) {
                 xbox_report_payload_t* report = (xbox_report_payload_t*)event->notify_rx.om->om_data;
-                format_xbox_report(output, report);
-                ESP_LOGI(TAG, "Report: %s", output);
+                if (compare_xbox_report(&prev, report)) {
+                    format_xbox_report(output, report);
+                    ESP_LOGI(TAG, "Report: \n%s", output);
+                    prev = *report;
+                }
             }
 
             // os_mbuf_free_chain(event->notify_rx.om);
@@ -379,40 +362,4 @@ void app_main(void) {
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host
     nimble_port_freertos_init(ble_host_task);
-}
-
-void format_xbox_report(char *output, const xbox_report_payload_t *report) {
-    sprintf(output,
-        "Left Stick: X=%u Y=%u | Right Stick: X=%u Y=%u\n"
-        "Left Trigger: %u | Right Trigger: %u\n"
-        "D-Pad: %u\n"
-        "Buttons: A=%u B=%u X=%u Y=%u LB=%u RB=%u\n"
-        "Stick Presses: LS=%u RS=%u\n"
-        "Menu Buttons: View=%u Menu=%u Share=%u\n"
-        "RFU Bits: %u %u %u %u %u %u\n",
-        report->left_stick_x,
-        report->left_stick_y,
-        report->right_stick_x,
-        report->right_stick_y,
-        report->left_trigger,
-        report->right_trigger,
-        report->dpad,
-        report->button_a,
-        report->button_b,
-        report->button_x,
-        report->button_y,
-        report->left_bumper,
-        report->right_bumper,
-        report->left_stick_press,
-        report->right_stick_press,
-        report->view_button,
-        report->menu_button,
-        report->share_button,
-        report->rfu_1,
-        report->rfu_2,
-        report->rfu_3,
-        report->rfu_4,
-        report->rfu_5,
-        report->rfu_6
-    );
 }
