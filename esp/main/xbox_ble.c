@@ -14,6 +14,7 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include "sdkconfig.h"
 #include "store/config/ble_store_config.h"
+#include "xbox_ble.h"
 
 // Xbox Wireless Controller Service UUIDs
 #define XBOX_SERVICE_UUID           0x1812  // HID Service
@@ -21,9 +22,11 @@
 #define XBOX_REPORT_MAP_UUID        0x2A4B  // Report Map
 #define XBOX_HID_INFO_UUID          0x2A4A  // HID Information
 #define XBOX_CONTROL_POINT_UUID     0x2A4C  // HID Control Point
+#define XBOX_CCCD_UUID              0x2902  // CCCD
 
 static const char *TAG = "xbox_ble";
 uint16_t conn_handle;
+uint16_t end_handle = 32;
 
 /* Function declaration */
 void start_scan(void);
@@ -31,7 +34,10 @@ int gap_event_handler(struct ble_gap_event *event, void *arg);
 void ble_store_config_init(void);
 int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_svc *service, void *arg);
 int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg);
-int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
+int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg);
+// int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
+int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
+void format_xbox_report(char *output, const xbox_report_payload_t *report);
 
 void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
@@ -91,6 +97,7 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
     char name[BLE_HS_ADV_MAX_SZ + 1] = {0};
     uint8_t own_addr_type;
     struct ble_gap_conn_desc desc;
+    char output[512];
 
     /* Handle different GAP event */
     switch (event->type) {
@@ -175,6 +182,21 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
             }
 
             break;
+
+        case BLE_GAP_EVENT_NOTIFY_RX:
+            ESP_LOGI(TAG, "Notification received on handle: %d", event->notify_rx.attr_handle);
+            uint16_t len = event->notify_rx.om->om_len;
+            ESP_LOGI(TAG, "Data length: %d", len);
+
+            if (event->notify_rx.attr_handle == 30) {
+                xbox_report_payload_t* report = (xbox_report_payload_t*)event->notify_rx.om->om_data;
+                format_xbox_report(output, report);
+                ESP_LOGI(TAG, "Report: %s", output);
+            }
+
+            // os_mbuf_free_chain(event->notify_rx.om);
+
+            break;
     }
 
     return 0;
@@ -212,9 +234,20 @@ int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const 
             ESP_LOGI(TAG, "Characteristic discovered: UUID=0x%04x, handle=%d, value_handle=%d, properties=0x%X", 
                     ble_uuid_u16(&chr->uuid.u), chr->def_handle, chr->val_handle, chr->properties);
 
+            // WE DON'T NEED TO READ REPORT MAP BECAUSE IT ONLY GIVES PARTIAL MAPPING. WE CAN FIND FULL MAPPING ONLINE.
             // Read Report Map
+            /*
             if (ble_uuid_u16(&chr->uuid.u) == XBOX_REPORT_MAP_UUID) {
                 ble_gattc_read(conn_handle, chr->val_handle, report_map_read_cb, NULL);
+            }
+            */
+
+            /*
+            If the characteristic uuid is 0x2a4d and has the notify property, discover its
+            descriptors to find CCCD. We need to write to CCCD to enable notifications.
+            */ 
+            if ((ble_uuid_u16(&chr->uuid.u) == XBOX_REPORT_UUID) && (chr->properties & BLE_GATT_CHR_PROP_NOTIFY)) {
+                ble_gattc_disc_all_dscs(conn_handle, chr->def_handle, end_handle, disc_desc_cb, NULL);
             }
 
             break;
@@ -229,6 +262,49 @@ int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const 
     return 0;
 }
 
+int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg) {
+    int rc;
+    uint8_t value[2];
+
+    switch (error->status) {
+        case 0:
+            // Look for Client Characteristic Configuration Descriptor (CCCD) - UUID 0x2902
+            if ((ble_uuid_u16(&dsc->uuid.u) == XBOX_CCCD_UUID)) {
+                ESP_LOGI(TAG, "Found CCCD (handle: %d)", dsc->handle);
+
+                // Subscribe to notifications by writing to the CCCD
+                value[0] = 1;
+                value[1] = 0;
+                rc = ble_gattc_write_flat(conn_handle, dsc->handle, value, sizeof(value), notify_event_cb, NULL);
+                if (rc != 0) {
+                    ESP_LOGE(TAG, "Failed to subscribe to notifications: %d", rc);
+                }
+               
+            }
+            break;
+
+        case BLE_HS_EDONE:
+            ESP_LOGI(TAG, "All descriptors discovered");
+            break;
+
+        default:
+            ESP_LOGE(TAG, "Descriptors discovery failed: %d", error->status);
+            break;
+    }
+
+    return 0;
+}
+
+int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg) {
+    if (error->status == 0) {
+        ESP_LOGI(TAG, "Successfully subscribed to notifications");
+    } else {
+        ESP_LOGE(TAG, "Failed to subscribe to notifications: %d", error->status);
+    }
+    return 0;    
+}
+
+/*
 int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg) {
     if (error->status == 0 && attr != NULL) {
         ESP_LOGI(TAG, "Report Map length: %d", attr->om->om_len);
@@ -246,6 +322,7 @@ int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error,
 
     return 0;
 }
+*/
 
 void app_main(void) {
     esp_err_t ret;
@@ -302,4 +379,40 @@ void app_main(void) {
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host
     nimble_port_freertos_init(ble_host_task);
+}
+
+void format_xbox_report(char *output, const xbox_report_payload_t *report) {
+    sprintf(output,
+        "Left Stick: X=%u Y=%u | Right Stick: X=%u Y=%u\n"
+        "Left Trigger: %u | Right Trigger: %u\n"
+        "D-Pad: %u\n"
+        "Buttons: A=%u B=%u X=%u Y=%u LB=%u RB=%u\n"
+        "Stick Presses: LS=%u RS=%u\n"
+        "Menu Buttons: View=%u Menu=%u Share=%u\n"
+        "RFU Bits: %u %u %u %u %u %u\n",
+        report->left_stick_x,
+        report->left_stick_y,
+        report->right_stick_x,
+        report->right_stick_y,
+        report->left_trigger,
+        report->right_trigger,
+        report->dpad,
+        report->button_a,
+        report->button_b,
+        report->button_x,
+        report->button_y,
+        report->left_bumper,
+        report->right_bumper,
+        report->left_stick_press,
+        report->right_stick_press,
+        report->view_button,
+        report->menu_button,
+        report->share_button,
+        report->rfu_1,
+        report->rfu_2,
+        report->rfu_3,
+        report->rfu_4,
+        report->rfu_5,
+        report->rfu_6
+    );
 }
