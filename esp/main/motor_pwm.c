@@ -5,6 +5,8 @@
 #include "driver/mcpwm_prelude.h"
 #include "driver/gpio.h"
 #include "motor_pwm.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "motor_pwm";
 
@@ -16,8 +18,11 @@ int IN3_GPIO = 6;
 int IN4_GPIO = 7;
 
 mcpwm_timer_handle_t timer = NULL;
+mcpwm_oper_handle_t operators = NULL;
 mcpwm_cmpr_handle_t comparatorA = NULL;
 mcpwm_cmpr_handle_t comparatorB = NULL;
+mcpwm_gen_handle_t generatorA = NULL;
+mcpwm_gen_handle_t generatorB = NULL;
 
 void init_pwm_dual(void)
 {
@@ -34,7 +39,6 @@ void init_pwm_dual(void)
 
     // Operator //
     ESP_LOGI(TAG, "Create operators");
-    mcpwm_oper_handle_t operators = NULL;
     mcpwm_operator_config_t operator_config = {
         .group_id = 0,
     };
@@ -56,14 +60,12 @@ void init_pwm_dual(void)
 
     // Generator A //
     ESP_LOGI(TAG, "Create generators");
-    mcpwm_gen_handle_t generatorA = NULL;
     mcpwm_generator_config_t gen_configA = {
         .gen_gpio_num = ENA_GPIO,
     };
     ESP_ERROR_CHECK(mcpwm_new_generator(operators, &gen_configA, &generatorA));
 
     // Generator B //
-    mcpwm_gen_handle_t generatorB = NULL;
     mcpwm_generator_config_t gen_configB = {
         .gen_gpio_num = ENB_GPIO,
     };
@@ -143,5 +145,23 @@ void set_direction_B(int dir) {
     else {
         gpio_set_level(IN3_GPIO, 0);
         gpio_set_level(IN4_GPIO, 0);
+    }
+}
+
+void motor_pwm_task(void *param) {
+    while (1) {
+        ESP_LOGI(TAG, "Forward");
+        set_pwm_A(100);
+        set_pwm_B(100);
+        set_direction_A(MOTOR_FORWARD);
+        set_direction_B(MOTOR_FORWARD);
+        vTaskDelay(pdMS_TO_TICKS(5000));  // Delay 1000 ms (1 second)
+
+        ESP_LOGI(TAG, "Backward");
+        set_pwm_A(100);
+        set_pwm_B(100);
+        set_direction_A(MOTOR_BACKWARD);
+        set_direction_B(MOTOR_BACKWARD);
+        vTaskDelay(pdMS_TO_TICKS(5000));  // Delay 1000 ms (1 second)
     }
 }

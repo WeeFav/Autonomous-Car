@@ -17,7 +17,6 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include "sdkconfig.h"
 #include "store/config/ble_store_config.h"
-#include "xbox_ble.h"
 #include "utils.h"
 
 // Xbox Wireless Controller Service UUIDs
@@ -37,5 +36,6 @@ int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const 
 int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg);
 // int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
 int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
+void xbox_ble_task(void *param);
 
 #endif

@@ -307,7 +307,7 @@ int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error,
 }
 */
 
-void app_main(void) {
+void xbox_ble_task(void *param) {
     esp_err_t ret;
 
     /*
@@ -362,4 +362,6 @@ void app_main(void) {
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host
     nimble_port_freertos_init(ble_host_task);
+
+    vTaskDelete(NULL); // Task no longer needed, NimBLE runs its own task
 }
