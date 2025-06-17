@@ -21,6 +21,7 @@ static const char *TAG = "xbox_ble";
 uint16_t conn_handle;
 uint16_t end_handle = 32;
 xbox_report_payload_t prev = {0};
+extern QueueHandle_t queue;
 
 void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
@@ -80,7 +81,11 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
     char name[BLE_HS_ADV_MAX_SZ + 1] = {0};
     uint8_t own_addr_type;
     struct ble_gap_conn_desc desc;
-    char output[512];
+    // char output[512];
+
+    if (event->type != 12) {
+        ESP_LOGI(TAG, "GAP Event: %d", event->type);
+    }
 
     /* Handle different GAP event */
     switch (event->type) {
@@ -137,9 +142,7 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
                     ESP_LOGE(TAG, "Security could not be initiated, rc = %d", rc);
                     return ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
                 } 
-                else {
-                    ESP_LOGI(TAG, "Connection secured");
-                }
+
             } 
             else {
                 /* Connection attempt failed; resume scanning. */
@@ -147,6 +150,11 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
                 start_scan();
             }
 
+            break;
+
+        case BLE_GAP_EVENT_DISCONNECT:
+            ESP_LOGI(TAG, "Disconnected. (reason: %d)", event->disconnect.reason);
+            start_scan();
             break;
 
         case BLE_GAP_EVENT_ENC_CHANGE:
@@ -161,7 +169,9 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
                 ble_gattc_disc_all_svcs(conn_handle, disc_svc_cb, NULL);
             }
             else {
-                ESP_LOGE(TAG, "The encryption state change attempt failed; status=%d\n", event->connect.status);
+                ESP_LOGE(TAG, "The encryption state change attempt failed; status=%d\n", event->enc_change.status);
+                ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+                start_scan();
             }
 
             break;
@@ -170,9 +180,16 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
             // Process only if the notification comes from xbox HID
             if (event->notify_rx.attr_handle == 30) {
                 xbox_report_payload_t* report = (xbox_report_payload_t*)event->notify_rx.om->om_data;
+                
                 if (compare_xbox_report(&prev, report)) {
-                    format_xbox_report(output, report);
-                    ESP_LOGI(TAG, "Report: \n%s", output);
+                    // format_xbox_report(output, report);
+                    // ESP_LOGI(TAG, "Report: \n%s", output);
+
+                    if (xQueueSend(queue, (void *)report, portMAX_DELAY) != pdTRUE) {
+                        ESP_LOGI(TAG, "Queue full\n");
+                    }
+                    ESP_LOGI(TAG, "xbox controller input sent to queue");
+
                     prev = *report;
                 }
             }
@@ -180,6 +197,23 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
             // os_mbuf_free_chain(event->notify_rx.om);
 
             break;
+
+        case BLE_GAP_EVENT_REPEAT_PAIRING:
+            /* We already have a bond with the peer, but it is attempting to
+            * establish a new secure link.  This app sacrifices security for
+            * convenience: just throw away the old bond and accept the new link.
+            */
+            ESP_LOGI(TAG, "Repeat pairing");
+
+            /* Delete the old bond. */
+            rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
+            assert(rc == 0);
+            ble_store_util_delete_peer(&desc.peer_id_addr);
+
+            /* Return BLE_GAP_REPEAT_PAIRING_RETRY to indicate that the host should
+            * continue with the pairing operation.
+            */
+            return BLE_GAP_REPEAT_PAIRING_RETRY;
     }
 
     return 0;
@@ -308,6 +342,8 @@ int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error,
 */
 
 void xbox_ble_task(void *param) {
+    queue = (QueueHandle_t)param;
+
     esp_err_t ret;
 
     /*

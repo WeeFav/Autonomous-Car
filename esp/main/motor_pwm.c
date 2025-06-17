@@ -7,6 +7,7 @@
 #include "motor_pwm.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "utils.h"
 
 static const char *TAG = "motor_pwm";
 
@@ -23,6 +24,8 @@ mcpwm_cmpr_handle_t comparatorA = NULL;
 mcpwm_cmpr_handle_t comparatorB = NULL;
 mcpwm_gen_handle_t generatorA = NULL;
 mcpwm_gen_handle_t generatorB = NULL;
+extern QueueHandle_t queue;
+xbox_report_payload_t report;
 
 void init_pwm_dual(void)
 {
@@ -149,19 +152,45 @@ void set_direction_B(int dir) {
 }
 
 void motor_pwm_task(void *param) {
-    while (1) {
-        ESP_LOGI(TAG, "Forward");
-        set_pwm_A(100);
-        set_pwm_B(100);
-        set_direction_A(MOTOR_FORWARD);
-        set_direction_B(MOTOR_FORWARD);
-        vTaskDelay(pdMS_TO_TICKS(5000));  // Delay 1000 ms (1 second)
+    queue = (QueueHandle_t)param;
 
-        ESP_LOGI(TAG, "Backward");
-        set_pwm_A(100);
-        set_pwm_B(100);
-        set_direction_A(MOTOR_BACKWARD);
-        set_direction_B(MOTOR_BACKWARD);
-        vTaskDelay(pdMS_TO_TICKS(5000));  // Delay 1000 ms (1 second)
+    while (1) {
+        if (xQueueReceive(queue, (void *)&report, portMAX_DELAY) == pdTRUE) {
+            ESP_LOGI(TAG, "Received xbox controller input");
+            ESP_LOGI(TAG, "D-Pad: %u\n", report.dpad);
+            if (report.dpad == 1) {
+                set_pwm_A(100);
+                set_direction_A(MOTOR_FORWARD);
+                set_pwm_B(100);
+                set_direction_B(MOTOR_FORWARD);
+            }
+            else if (report.dpad == 3) {
+                set_pwm_A(100);
+                set_direction_A(MOTOR_BACKWARD);
+                set_pwm_B(100);
+                set_direction_B(MOTOR_FORWARD);
+            }
+            else if (report.dpad == 5) {
+                set_pwm_A(100);
+                set_direction_A(MOTOR_BACKWARD);
+                set_pwm_B(100);
+                set_direction_B(MOTOR_BACKWARD);
+            }
+            else if (report.dpad == 7) {
+                set_pwm_A(100);
+                set_direction_A(MOTOR_FORWARD);
+                set_pwm_B(100);
+                set_direction_B(MOTOR_BACKWARD);
+            }
+            else {
+                set_pwm_A(0);
+                set_direction_A(MOTOR_STOP);
+                set_pwm_B(0);
+                set_direction_B(MOTOR_STOP);
+            }
+        } 
+        else {
+            ESP_LOGI(TAG, "Failed to received xbox controller input");
+        }
     }
 }
