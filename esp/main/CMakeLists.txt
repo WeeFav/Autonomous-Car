@@ -1,2 +1,2 @@
-idf_component_register(SRCS "xbox_ble.c" "motor_pwm.c" "main.c" "utils.c"
+idf_component_register(SRCS "utils.c" "xbox_ble.c" "motor_pwm.c" "jetson_uart.c" "main.c"
                     INCLUDE_DIRS ".")

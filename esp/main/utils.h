@@ -5,7 +5,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-
 // This struct represents the 16-byte payload of the controller report,
 // excluding the Report ID.
 typedef struct __attribute__((packed)) {

@@ -1,4 +1,4 @@
-#include "xbox_ble.h"
+#include <stdio.h>
 #include "utils.h"
 
 void format_xbox_report(char *output, const xbox_report_payload_t *report) {
