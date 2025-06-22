@@ -196,20 +196,20 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
                     // ESP_LOGI(TAG, "Report: \n%s", output);
 
                     // Send to motor
-                    if (xQueueSend(xbox_ble_task_args->xbox_input_queue, (void *)report, portMAX_DELAY) != pdTRUE) {
+                    if (xQueueSend(xbox_ble_task_args->xbox_input_queue, (void *)report, 0) != pdTRUE) {
                         ESP_LOGI(TAG, "Queue full\n");
                     }
 
-                    // Send to UART
-                    uart_tx_message_t msg;
-                    msg.type = MSG_TYPE_XBOX;
-                    msg.size = sizeof(*report);
-                    memcpy(msg.payload, report, sizeof(*report));
+                    // // Send to UART
+                    // uart_tx_message_t msg;
+                    // msg.type = MSG_TYPE_XBOX;
+                    // msg.size = sizeof(*report);
+                    // memcpy(msg.payload, report, sizeof(*report));
 
-                    if (xQueueSend(xbox_ble_task_args->uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
-                        ESP_LOGI(TAG, "Queue full\n");
-                    }
-                    ESP_LOGI(TAG, "xbox controller input sent to queue");
+                    // if (xQueueSend(xbox_ble_task_args->uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
+                    //     ESP_LOGI(TAG, "Queue full\n");
+                    // }
+                    // ESP_LOGI(TAG, "xbox controller input sent to queue");
 
                     prev = *report;
                 }
