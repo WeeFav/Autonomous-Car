@@ -16,12 +16,21 @@
 #include "store/config/ble_store_config.h"
 #include "xbox_ble.h"
 #include "utils.h"
+#include "esp_bt.h"
+
+// Xbox Wireless Controller Service UUIDs
+#define XBOX_SERVICE_UUID           0x1812  // HID Service
+#define XBOX_REPORT_UUID            0x2A4D  // Report Characteristic
+#define XBOX_REPORT_MAP_UUID        0x2A4B  // Report Map
+#define XBOX_HID_INFO_UUID          0x2A4A  // HID Information
+#define XBOX_CONTROL_POINT_UUID     0x2A4C  // HID Control Point
+#define XBOX_CCCD_UUID              0x2902  // CCCD
 
 static const char *TAG = "xbox_ble";
-uint16_t conn_handle;
-uint16_t end_handle = 32;
-xbox_report_payload_t prev = {0};
-extern QueueHandle_t queue;
+static uint16_t conn_handle;
+static uint16_t end_handle = 32;
+static xbox_report_payload_t prev = {0};
+static QueueHandle_t xbox_input_queue;
 
 void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
@@ -185,7 +194,7 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
                     // format_xbox_report(output, report);
                     // ESP_LOGI(TAG, "Report: \n%s", output);
 
-                    if (xQueueSend(queue, (void *)report, portMAX_DELAY) != pdTRUE) {
+                    if (xQueueSend(xbox_input_queue, (void *)report, portMAX_DELAY) != pdTRUE) {
                         ESP_LOGI(TAG, "Queue full\n");
                     }
                     ESP_LOGI(TAG, "xbox controller input sent to queue");
@@ -341,9 +350,7 @@ int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error,
 }
 */
 
-void xbox_ble_task(void *param) {
-    queue = (QueueHandle_t)param;
-
+void xbox_ble_init() {
     esp_err_t ret;
 
     /*
@@ -394,6 +401,13 @@ void xbox_ble_task(void *param) {
 
     /* Store host configuration */
     ble_store_config_init();
+
+    // Max TX power
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9);
+}
+
+void xbox_ble_task(void *param) {
+    xbox_input_queue = (QueueHandle_t)param;
 
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host

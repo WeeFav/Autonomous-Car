@@ -8,24 +8,27 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "utils.h"
+#include "freertos/queue.h"
+
+#define MOTOR_STOP 0
+#define MOTOR_FORWARD 1
+#define MOTOR_BACKWARD 2
+#define ENA_GPIO 40
+#define ENB_GPIO 41
+#define IN1_GPIO 4
+#define IN2_GPIO 5
+#define IN3_GPIO 6
+#define IN4_GPIO 7
 
 static const char *TAG = "motor_pwm";
 
-int ENA_GPIO = 40;
-int ENB_GPIO = 41;
-int IN1_GPIO = 4;
-int IN2_GPIO = 5;
-int IN3_GPIO = 6;
-int IN4_GPIO = 7;
-
-mcpwm_timer_handle_t timer = NULL;
-mcpwm_oper_handle_t operators = NULL;
-mcpwm_cmpr_handle_t comparatorA = NULL;
-mcpwm_cmpr_handle_t comparatorB = NULL;
-mcpwm_gen_handle_t generatorA = NULL;
-mcpwm_gen_handle_t generatorB = NULL;
-extern QueueHandle_t queue;
-xbox_report_payload_t report;
+static mcpwm_timer_handle_t timer = NULL;
+static mcpwm_oper_handle_t operators = NULL;
+static mcpwm_cmpr_handle_t comparatorA = NULL;
+static mcpwm_cmpr_handle_t comparatorB = NULL;
+static mcpwm_gen_handle_t generatorA = NULL;
+static mcpwm_gen_handle_t generatorB = NULL;
+static xbox_report_payload_t report;
 
 void init_pwm_dual(void)
 {
@@ -82,6 +85,22 @@ void init_pwm_dual(void)
     
     ESP_ERROR_CHECK(mcpwm_generator_set_action_on_timer_event(generatorB, MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, MCPWM_TIMER_EVENT_EMPTY, MCPWM_GEN_ACTION_HIGH)));
     ESP_ERROR_CHECK(mcpwm_generator_set_actions_on_compare_event(generatorB, MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, comparatorB, MCPWM_GEN_ACTION_LOW)));   
+
+    // Start PWM
+    ESP_LOGI(TAG, "Enable and start timer");
+    ESP_ERROR_CHECK(mcpwm_timer_enable(timer));
+    ESP_ERROR_CHECK(mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP));   
+}
+
+void init_direction_dual(void) {
+    gpio_reset_pin(IN1_GPIO);
+    gpio_reset_pin(IN2_GPIO);
+    gpio_reset_pin(IN3_GPIO);
+    gpio_reset_pin(IN4_GPIO);
+    gpio_set_direction(IN1_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_direction(IN2_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_direction(IN3_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_direction(IN4_GPIO, GPIO_MODE_OUTPUT);
 }
 
 void set_pwm_A(int duty_cycle) {
@@ -102,23 +121,6 @@ void set_pwm_B(int duty_cycle) {
         duty_cycle = 100;
     }
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorB, duty_cycle * 10)); 
-}
-
-void start_pwm_dual(void) {
-    ESP_LOGI(TAG, "Enable and start timer");
-    ESP_ERROR_CHECK(mcpwm_timer_enable(timer));
-    ESP_ERROR_CHECK(mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP));   
-}
-
-void init_direction_dual(void) {
-    gpio_reset_pin(IN1_GPIO);
-    gpio_reset_pin(IN2_GPIO);
-    gpio_reset_pin(IN3_GPIO);
-    gpio_reset_pin(IN4_GPIO);
-    gpio_set_direction(IN1_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_direction(IN2_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_direction(IN3_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_direction(IN4_GPIO, GPIO_MODE_OUTPUT);
 }
 
 void set_direction_A(int dir) {
@@ -152,10 +154,10 @@ void set_direction_B(int dir) {
 }
 
 void motor_pwm_task(void *param) {
-    queue = (QueueHandle_t)param;
+    QueueHandle_t xbox_input_queue = (QueueHandle_t)param;
 
     while (1) {
-        if (xQueueReceive(queue, (void *)&report, portMAX_DELAY) == pdTRUE) {
+        if (xQueueReceive(xbox_input_queue, (void *)&report, portMAX_DELAY) == pdTRUE) {
             ESP_LOGI(TAG, "Received xbox controller input");
             ESP_LOGI(TAG, "D-Pad: %u\n", report.dpad);
             if (report.dpad == 1) {
