@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -29,8 +30,8 @@
 static const char *TAG = "xbox_ble";
 static uint16_t conn_handle;
 static uint16_t end_handle = 32;
-static xbox_report_payload_t prev = {0};
-static QueueHandle_t xbox_input_queue;
+static xbox_input_t prev = {0};
+static xbox_ble_task_args_t *xbox_ble_task_args;
 
 void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
@@ -188,13 +189,24 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
         case BLE_GAP_EVENT_NOTIFY_RX:
             // Process only if the notification comes from xbox HID
             if (event->notify_rx.attr_handle == 30) {
-                xbox_report_payload_t* report = (xbox_report_payload_t*)event->notify_rx.om->om_data;
+                xbox_input_t* report = (xbox_input_t*)event->notify_rx.om->om_data;
                 
                 if (compare_xbox_report(&prev, report)) {
                     // format_xbox_report(output, report);
                     // ESP_LOGI(TAG, "Report: \n%s", output);
 
-                    if (xQueueSend(xbox_input_queue, (void *)report, portMAX_DELAY) != pdTRUE) {
+                    // Send to motor
+                    if (xQueueSend(xbox_ble_task_args->xbox_input_queue, (void *)report, portMAX_DELAY) != pdTRUE) {
+                        ESP_LOGI(TAG, "Queue full\n");
+                    }
+
+                    // Send to UART
+                    uart_tx_message_t msg;
+                    msg.type = MSG_TYPE_XBOX;
+                    msg.size = sizeof(*report);
+                    memcpy(msg.payload, report, sizeof(*report));
+
+                    if (xQueueSend(xbox_ble_task_args->uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
                         ESP_LOGI(TAG, "Queue full\n");
                     }
                     ESP_LOGI(TAG, "xbox controller input sent to queue");
@@ -407,11 +419,12 @@ void xbox_ble_init() {
 }
 
 void xbox_ble_task(void *param) {
-    xbox_input_queue = (QueueHandle_t)param;
+    xbox_ble_task_args = (xbox_ble_task_args_t *)param;
 
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host
     nimble_port_freertos_init(ble_host_task);
 
+    free(xbox_ble_task_args);
     vTaskDelete(NULL); // Task no longer needed, NimBLE runs its own task
 }

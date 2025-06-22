@@ -5,6 +5,7 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "utils.h"
 
 #define TX_GPIO 17
 #define RX_GPIO 18
@@ -68,11 +69,12 @@ void jetson_uart_task(void *param) {
             }
         }
 
-        // Handle outgoing messages from TX queue
-        char *rx_data;
-        if (xQueueReceive(uart_tx_queue, &rx_data, 0) == pdTRUE) {
-            uart_write_bytes(UART_NUM_1, rx_data, strlen(rx_data));
-            // free(rx_data); // If dynamically allocated
-        }
+        // // Handle outgoing messages from TX queue
+        // uart_tx_message_t msg;
+        // if (xQueueReceive(uart_tx_queue, &msg, portMAX_DELAY) == pdTRUE) {
+        //     uart_write_bytes(UART_NUM_1, (const char *)&msg.type, sizeof(msg.type));
+        //     uart_write_bytes(UART_NUM_1, (const char *)&msg.size, sizeof(msg.size));
+        //     uart_write_bytes(UART_NUM_1, (const char *)msg.payload, msg.size);
+        // }
     }
 }

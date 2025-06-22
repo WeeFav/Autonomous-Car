@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 
 // This struct represents the 16-byte payload of the controller report,
 // excluding the Report ID.
@@ -50,9 +51,30 @@ typedef struct __attribute__((packed)) {
     uint8_t share_button : 1;
     uint8_t share_button_padding : 7;
 
-} xbox_report_payload_t;
+} xbox_input_t;
 
-void format_xbox_report(char *output, const xbox_report_payload_t *report);
-bool compare_xbox_report(const xbox_report_payload_t *prev, const xbox_report_payload_t *curr);
+typedef struct {
+    float accel_x, accel_y, accel_z;
+    float gyro_x, gyro_y, gyro_z;
+} imu_input_t;
+
+typedef struct {
+    QueueHandle_t xbox_input_queue;
+    QueueHandle_t uart_tx_queue;
+} xbox_ble_task_args_t;
+
+typedef enum {
+    MSG_TYPE_XBOX,
+    MSG_TYPE_IMU
+} MessageType;
+
+typedef struct {
+    MessageType type;
+    size_t size;
+    uint8_t payload[24]; // maximum struct size is imu_input_t (24 bytes)
+} uart_tx_message_t;
+
+void format_xbox_report(char *output, const xbox_input_t *report);
+bool compare_xbox_report(const xbox_input_t *prev, const xbox_input_t *curr);
 
 #endif
