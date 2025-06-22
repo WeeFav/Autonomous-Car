@@ -2,6 +2,17 @@
 #include <termios.h>
 #include <unistd.h>
 #include <iostream>
+#include <string.h>
+
+enum MessageType {
+    MSG_TYPE_XBOX,
+    MSG_TYPE_IMU
+};
+
+struct imu_input_t {
+    float accel_x, accel_y, accel_z;
+    float gyro_x, gyro_y, gyro_z;
+};
 
 int uart_init(const char* device) {
     // Open device as a file
@@ -12,6 +23,8 @@ int uart_init(const char* device) {
         std::cout << "Cannot open serial port" << std::endl;
         return -1;
     }
+
+    // fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
 
     // Get the current attributes of the Serial port
     struct termios tty;
@@ -25,8 +38,8 @@ int uart_init(const char* device) {
     tty.c_iflag &= ~IGNBRK;                         // disable break processing
     tty.c_lflag = 0;                                // no signaling chars, no echo, no canonical processing
     tty.c_oflag = 0;                                // no remapping, no delays
-    tty.c_cc[VMIN]  = 0;                            // read blocks until at least 1 char
-    tty.c_cc[VTIME] = 1;                            // timeout in deciseconds
+    tty.c_cc[VMIN]  = 1;                            // read blocks until at least 1 char
+    tty.c_cc[VTIME] = 0;                            // timeout in deciseconds
 
     tty.c_iflag &= ~(IXON | IXOFF | IXANY);         // shut off xon/xoff ctrl
     tty.c_cflag |= (CLOCAL | CREAD);                // ignore modem controls, enable reading
@@ -35,7 +48,9 @@ int uart_init(const char* device) {
     tty.c_cflag &= ~CRTSCTS;                        // Disables hardware flow control (RTS/CTS)
 
     // Apply the modified settings to the serial port immediately
-    tcsetattr(fd, TCSANOW, &tty);
+    if (tcsetattr(fd, TCSANOW, &tty) != 0) {
+        std::cerr << "Error setting termios attributes" << std::endl;
+    }
 
     return fd;
 }
@@ -48,12 +63,40 @@ void send_data(int fd, const std::string& msg) {
 }
 
 void receive_data(int fd) {
-    char buf[256];
-    int n = read(fd, buf, sizeof(buf));
-    if (n > 0) {
-        buf[n] = '\0';
-        std::cout << "Received: " << buf << std::endl;
-    }
+    // char buf[256];
+    // int n = read(fd, buf, sizeof(buf));
+    // if (n > 0) {
+    //     buf[n] = '\0';
+    //     std::cout << "Received: " << buf << std::endl;
+    // }    
+
+    int n;
+    MessageType type;
+    uint16_t size;
+    uint8_t payload[24];
+
+    n = read(fd, &type, sizeof(type));
+    // std::cout << "first n: " << n << std::endl;
+    // std::cout << "type: " << type << std::endl;
+
+    n = read(fd, &size, sizeof(size));
+    // std::cout << "second n: " << n << std::endl;
+    // std::cout << "size: " << size << std::endl;
+
+    n = read(fd, payload, size);
+    // std::cout << "third n: " << n << std::endl;
+
+    if (type == MSG_TYPE_IMU) {
+        imu_input_t imu;
+        memcpy(&imu, payload, sizeof(imu));
+        std::cout << "accel_x:" << imu.accel_x << std::endl;
+        std::cout << "accel_y:" << imu.accel_y << std::endl;
+        std::cout << "accel_z:" << imu.accel_z << std::endl;
+
+        std::cout << "gyro_x:" << imu.gyro_x << std::endl;
+        std::cout << "gyro_y:" << imu.gyro_y << std::endl;
+        std::cout << "gyro_z:" << imu.gyro_z << std::endl;
+    }    
 }
 
 int main() {
@@ -65,9 +108,7 @@ int main() {
 
     while (1) {
         send_data(fd, "Hello ESP32\n");
-        sleep(1);
-        // receive_data(fd);
-        std::cout << "return" << std::endl;
+        receive_data(fd);
     }
 
     close(fd);
