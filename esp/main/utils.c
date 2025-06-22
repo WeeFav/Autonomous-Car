@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "utils.h"
 
-void format_xbox_report(char *output, const xbox_report_payload_t *report) {
+void format_xbox_report(char *output, const xbox_input_t *report) {
     sprintf(output,
         "Left Stick: X=%u Y=%u | Right Stick: X=%u Y=%u\n"
         "Left Trigger: %u | Right Trigger: %u\n"
@@ -37,7 +37,7 @@ void format_xbox_report(char *output, const xbox_report_payload_t *report) {
     );
 }
 
-bool compare_xbox_report(const xbox_report_payload_t *prev, const xbox_report_payload_t *curr) {
+bool compare_xbox_report(const xbox_input_t *prev, const xbox_input_t *curr) {
     // Ignore left and right stick
     
     // Compare triggers

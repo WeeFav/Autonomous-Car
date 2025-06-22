@@ -28,7 +28,7 @@ static mcpwm_cmpr_handle_t comparatorA = NULL;
 static mcpwm_cmpr_handle_t comparatorB = NULL;
 static mcpwm_gen_handle_t generatorA = NULL;
 static mcpwm_gen_handle_t generatorB = NULL;
-static xbox_report_payload_t report;
+static xbox_input_t report;
 
 void init_pwm_dual(void)
 {
