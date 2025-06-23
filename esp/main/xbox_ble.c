@@ -33,6 +33,12 @@ static uint16_t end_handle = 32;
 static xbox_input_t prev = {0};
 static xbox_ble_task_args_t *xbox_ble_task_args;
 
+
+static QueueHandle_t xbox_input_queue;
+static QueueHandle_t uart_tx_queue;
+
+
+
 void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
     // on_stack_reset is called when host resets BLE stack due to errors
@@ -190,26 +196,26 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
             // Process only if the notification comes from xbox HID
             if (event->notify_rx.attr_handle == 30) {
                 xbox_input_t* report = (xbox_input_t*)event->notify_rx.om->om_data;
-                
+
                 if (compare_xbox_report(&prev, report)) {
                     // format_xbox_report(output, report);
                     // ESP_LOGI(TAG, "Report: \n%s", output);
 
                     // Send to motor
-                    if (xQueueSend(xbox_ble_task_args->xbox_input_queue, (void *)report, 0) != pdTRUE) {
+                    if (xQueueSend(xbox_input_queue, (void *)report, portMAX_DELAY) != pdTRUE) {
                         ESP_LOGI(TAG, "Queue full\n");
                     }
 
-                    // // Send to UART
-                    // uart_tx_message_t msg;
-                    // msg.type = MSG_TYPE_XBOX;
-                    // msg.size = sizeof(*report);
-                    // memcpy(msg.payload, report, sizeof(*report));
+                    // Send to UART
+                    uart_tx_message_t msg;
+                    msg.type = MSG_TYPE_XBOX;
+                    msg.size = sizeof(*report);
+                    memcpy(msg.payload, report, sizeof(*report));
 
-                    // if (xQueueSend(xbox_ble_task_args->uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
-                    //     ESP_LOGI(TAG, "Queue full\n");
-                    // }
-                    // ESP_LOGI(TAG, "xbox controller input sent to queue");
+                    if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
+                        ESP_LOGI(TAG, "Queue full\n");
+                    }
+                    ESP_LOGI(TAG, "xbox controller input sent to queue");
 
                     prev = *report;
                 }
@@ -420,6 +426,13 @@ void xbox_ble_init() {
 
 void xbox_ble_task(void *param) {
     xbox_ble_task_args = (xbox_ble_task_args_t *)param;
+    
+    if (xbox_ble_task_args->xbox_input_queue == NULL) {
+        ESP_LOGE(TAG, "xbox_input_queue is NULL");
+    }
+
+    xbox_input_queue = xbox_ble_task_args->xbox_input_queue;
+    uart_tx_queue = xbox_ble_task_args->uart_tx_queue;
 
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host

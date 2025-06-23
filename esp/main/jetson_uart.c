@@ -44,7 +44,7 @@ void uart_init() {
 
 void jetson_uart_rx_task(void *param) {
     uart_event_t event;
-    uint8_t rx_data[UART_BUFFER_SIZE];
+    uint8_t rx_data[128];
 
     while (1) {
         // Wait for UART event
@@ -67,6 +67,7 @@ void jetson_uart_rx_task(void *param) {
                     break;
             }
         }
+
     }
 }
 

@@ -44,8 +44,8 @@ void app_main(void)
 
     xTaskCreatePinnedToCore(xbox_ble_task, "xbox_ble_task", 4096, xbox_ble_task_args, 3, NULL, PRO_CPU_NUM);
     xTaskCreatePinnedToCore(motor_pwm_task, "motor_pwm_task", 4096, xbox_input_queue, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 2048, NULL, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 2048, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(imu_task, "imu_task", 2048, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(imu_task, "imu_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
 }
 
