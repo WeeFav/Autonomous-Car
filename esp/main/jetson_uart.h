@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 void uart_init();
-void jetson_uart_task(void *param);
+void jetson_uart_rx_task(void *param);
+void jetson_uart_tx_task(void *param);
 
 #endif

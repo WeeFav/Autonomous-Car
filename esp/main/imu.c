@@ -33,8 +33,7 @@ void imu_task(void *param) {
         if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
             ESP_LOGI(TAG, "Queue full\n");
         }
-        ESP_LOGI(TAG, "imu input sent to queue");
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // 500 ms
+        vTaskDelay(500 / portTICK_PERIOD_MS); // 500 ms
     }
 }

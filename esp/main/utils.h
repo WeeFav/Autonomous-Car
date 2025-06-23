@@ -70,7 +70,7 @@ typedef enum {
 
 typedef struct {
     MessageType type;
-    size_t size;
+    uint16_t size;
     uint8_t payload[24]; // maximum struct size is imu_input_t (24 bytes)
 } uart_tx_message_t;
 

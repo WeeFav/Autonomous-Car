@@ -42,8 +42,7 @@ void uart_init() {
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, UART_BUFFER_SIZE, UART_BUFFER_SIZE, 10, &uart_event_queue, 0));
 }
 
-void jetson_uart_task(void *param) {
-    QueueHandle_t uart_tx_queue = (QueueHandle_t)param;
+void jetson_uart_rx_task(void *param) {
     uart_event_t event;
     uint8_t rx_data[UART_BUFFER_SIZE];
 
@@ -68,13 +67,24 @@ void jetson_uart_task(void *param) {
                     break;
             }
         }
+    }
+}
 
-        // // Handle outgoing messages from TX queue
-        // uart_tx_message_t msg;
-        // if (xQueueReceive(uart_tx_queue, &msg, portMAX_DELAY) == pdTRUE) {
-        //     uart_write_bytes(UART_NUM_1, (const char *)&msg.type, sizeof(msg.type));
-        //     uart_write_bytes(UART_NUM_1, (const char *)&msg.size, sizeof(msg.size));
-        //     uart_write_bytes(UART_NUM_1, (const char *)msg.payload, msg.size);
-        // }
+void jetson_uart_tx_task(void *param) {
+    QueueHandle_t uart_tx_queue = (QueueHandle_t)param;
+
+    while (1) {
+        // Handle outgoing messages from TX queue
+        uart_tx_message_t msg;
+        if (xQueueReceive(uart_tx_queue, &msg, portMAX_DELAY) == pdTRUE) {
+            ESP_LOGI(TAG, "Writing...");
+            uart_write_bytes(UART_NUM_1, (const char *)&msg.type, sizeof(msg.type));
+            uart_write_bytes(UART_NUM_1, (const char *)&msg.size, sizeof(msg.size));
+            uart_write_bytes(UART_NUM_1, (const char *)msg.payload, msg.size);
+        }
+
+        // char buf[] = "Hello Jetson";
+        // uart_write_bytes(UART_NUM_1, (const char *)buf, strlen(buf));
+        // vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
