@@ -9,6 +9,50 @@ enum MessageType {
     MSG_TYPE_IMU
 };
 
+#pragma pack(push, 1)  // Ensure packed structure
+struct xbox_input_t {
+    // Joysticks (16-bit values, 0–65535)
+    uint16_t left_stick_x;
+    uint16_t left_stick_y;
+    uint16_t right_stick_x;
+    uint16_t right_stick_y;
+
+    // Triggers (10-bit values, 0–1023)
+    uint16_t left_trigger : 10;
+    uint16_t left_trigger_padding : 6;
+    uint16_t right_trigger : 10;
+    uint16_t right_trigger_padding : 6;
+
+    // D-Pad (4-bit value)
+    uint8_t dpad : 4;
+    uint8_t dpad_padding : 4;
+
+    // Face Buttons & Bumpers (1-bit flags)
+    uint8_t button_a : 1;
+    uint8_t button_b : 1;
+    uint8_t rfu_1 : 1;
+    uint8_t button_x : 1;
+    uint8_t button_y : 1;
+    uint8_t rfu_2 : 1;
+    uint8_t left_bumper : 1;
+    uint8_t right_bumper : 1;
+
+    // Special Buttons (1-bit flags)
+    uint8_t rfu_3 : 1;
+    uint8_t rfu_4 : 1;
+    uint8_t view_button : 1;
+    uint8_t menu_button : 1;
+    uint8_t left_stick_press : 1;
+    uint8_t right_stick_press : 1;
+    uint8_t rfu_5 : 1;
+    uint8_t rfu_6 : 1;
+
+    // Share Button (1-bit flag)
+    uint8_t share_button : 1;
+    uint8_t share_button_padding : 7;
+};
+#pragma pack(pop)
+
 struct imu_input_t {
     float accel_x, accel_y, accel_z;
     float gyro_x, gyro_y, gyro_z;
@@ -89,14 +133,19 @@ void receive_data(int fd) {
     if (type == MSG_TYPE_IMU) {
         imu_input_t imu;
         memcpy(&imu, payload, sizeof(imu));
-        std::cout << "accel_x:" << imu.accel_x << std::endl;
-        std::cout << "accel_y:" << imu.accel_y << std::endl;
-        std::cout << "accel_z:" << imu.accel_z << std::endl;
+        std::cout << "accel_x: " << imu.accel_x << std::endl;
+        std::cout << "accel_y: " << imu.accel_y << std::endl;
+        std::cout << "accel_z: " << imu.accel_z << std::endl;
 
-        std::cout << "gyro_x:" << imu.gyro_x << std::endl;
-        std::cout << "gyro_y:" << imu.gyro_y << std::endl;
-        std::cout << "gyro_z:" << imu.gyro_z << std::endl;
-    }    
+        std::cout << "gyro_x: " << imu.gyro_x << std::endl;
+        std::cout << "gyro_y: " << imu.gyro_y << std::endl;
+        std::cout << "gyro_z: " << imu.gyro_z << std::endl;
+    }
+    else if (type == MSG_TYPE_XBOX) {
+        xbox_input_t report;
+        memcpy(&report, payload, sizeof(report));
+        std::cout << "D-Pad: " << static_cast<int>(report.dpad) << std::endl;
+    }   
 }
 
 int main() {
