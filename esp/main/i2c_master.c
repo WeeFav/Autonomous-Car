@@ -18,7 +18,7 @@ void i2c_master_init() {
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
     };
-    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, bus_handle));
+    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &bus_handle));
 
     // ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle));
     // ESP_ERROR_CHECK(i2c_master_bus_rm_device(dev_handle));

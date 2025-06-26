@@ -10,6 +10,7 @@
 #include "utils.h"
 #include "encoder.h"
 #include "i2c_master.h"
+#include "esp_log.h"
 
 void app_main(void)
 {
@@ -37,8 +38,8 @@ void app_main(void)
     So put all initalization in app_main
     */
     // pwm
-    init_pwm_dual();
-    init_direction_dual();
+    init_pwm();
+    init_direction();
     // ble
     xbox_ble_init();
     // uart

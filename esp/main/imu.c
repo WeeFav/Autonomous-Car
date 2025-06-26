@@ -12,9 +12,6 @@
 #define MPU6050_ADDR 0x68
 
 static const char *TAG = "imu";
-
-static imu_input_t imu;
-static QueueHandle_t uart_tx_queue;
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t dev_handle;
 
@@ -31,7 +28,7 @@ void imu_init() {
 }
 
 void imu_task(void *param) {
-    uart_tx_queue = (QueueHandle_t)param;
+    QueueHandle_t uart_tx_queue = (QueueHandle_t)param;
     
     // Write to imu to configure it
     // Configure power mode
@@ -39,19 +36,23 @@ void imu_task(void *param) {
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, write_buf, sizeof(write_buf), -1));
 
     // Configure Gyroscope
-    uint8_t write_buf[2] = {0x1B, 0x08}; // The packet must have an address followed by the data
+    write_buf[0] = 0x1B;
+    write_buf[1] = 0x08;
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, write_buf, sizeof(write_buf), -1));
 
     // Configure Accelerometer
-    uint8_t write_buf[2] = {0x1C, 0x00}; // The packet must have an address followed by the data
+    write_buf[0] = 0x1C;
+    write_buf[1] = 0x00;
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, write_buf, sizeof(write_buf), -1));
     
     // Read 
-    uint8_t write_buf[1] = 0x3B;
+    write_buf[0] = 0x3B;
     uint8_t raw_imu[14];
     uart_tx_message_t msg;
+    imu_input_t imu;
+
     while (1) {
-        ESP_ERROR_CHECK(i2c_master_transmit_receive(dev_handle, write_buf, sizeof(write_buf), raw_imu, sizeof(raw_imu), -1));
+        ESP_ERROR_CHECK(i2c_master_transmit_receive(dev_handle, write_buf, 1, raw_imu, sizeof(raw_imu), -1));
         
         int16_t accel_x = (int16_t)((raw_imu[0] << 8) | raw_imu[1]);
         int16_t accel_y = (int16_t)((raw_imu[2] << 8) | raw_imu[3]);

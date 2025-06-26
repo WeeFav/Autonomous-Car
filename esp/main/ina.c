@@ -39,23 +39,25 @@ void ina_init() {
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &rm_dev_handle));
 }
 
-void configure(i2c_master_dev_handle_t dev_handle) {
+static void configure(i2c_master_dev_handle_t dev_handle) {
     // Reset & Configure
     uint8_t write_buf[3] = {0x00, 0x39, 0x9F};
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, write_buf, sizeof(write_buf), -1));
 
     // Configure Calibration
     // Adafruit INA219 breakout board comes with a 0.1Ω shunt resistor and supports up to 3.2A current
-    uint8_t write_buf[3] = {0x05, 0x10, 0x00};
+    write_buf[0] = 0x05;
+    write_buf[1] = 0x10;
+    write_buf[2] = 0x00;
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, write_buf, sizeof(write_buf), -1));
 }
 
-ina_input_t read_ina() {
+static ina_input_t read_ina(i2c_master_dev_handle_t dev_handle) {
     uint8_t write_buf[1];
     uint8_t read_buf[2];    
     uint16_t value;
 
-    write_buf[1] = 0x02;
+    write_buf[0] = 0x02;
     // Read bus voltage
     ESP_ERROR_CHECK(i2c_master_transmit_receive(dev_handle, write_buf, sizeof(write_buf), read_buf, sizeof(read_buf), -1));
     value = (read_buf[0] << 8) | read_buf[1];
@@ -65,7 +67,7 @@ ina_input_t read_ina() {
     float bus_voltage = (float)((value >> 3) * 4) / 1000.0;  // in Volts
 
     // Read shunt voltage
-    write_buf[1] = 0x01;
+    write_buf[0] = 0x01;
     ESP_ERROR_CHECK(i2c_master_transmit_receive(dev_handle, write_buf, sizeof(write_buf), read_buf, sizeof(read_buf), -1));
     value = (read_buf[0] << 8) | read_buf[1];
     // convert unsign to sign
@@ -83,7 +85,7 @@ ina_input_t read_ina() {
     return ina;
 }
 
-void send_uart(ina_input_t ina) {
+static void send_uart(ina_input_t ina) {
     uart_tx_message_t msg;
     // send ina data to UART
     msg.type = MSG_TYPE_INA;
@@ -103,9 +105,9 @@ void ina_task(void *param) {
     configure(rm_dev_handle);
 
     while (1) {
-        ina_input_t esp_ina = read_ina();
-        ina_input_t lm_ina = read_ina();
-        ina_input_t rm_ina = read_ina();
+        ina_input_t esp_ina = read_ina(esp_dev_handle);
+        ina_input_t lm_ina = read_ina(lm_dev_handle);
+        ina_input_t rm_ina = read_ina(rm_dev_handle);
 
         send_uart(esp_ina);
         send_uart(lm_ina);

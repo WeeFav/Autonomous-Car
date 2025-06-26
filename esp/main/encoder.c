@@ -13,15 +13,30 @@
 #define SPEED_CALC_INTERVAL_MS 1000  // How often to calculate speed
 
 static const char *TAG = "encoder";
-
 static volatile int pulse_count_l = 0;
 static volatile int pulse_count_r = 0;
 static uint64_t prev_time = 0;
-static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-
 static volatile uint64_t last_l_us = 0;
+static volatile uint64_t last_r_us = 0;
 
-void encoder_init(void) {
+// ISR: Called on each encoder pulse
+static void IRAM_ATTR encoder_l_isr_handler(void* arg) {
+    uint64_t now = esp_timer_get_time();
+    if (now - last_l_us > 5000 && gpio_get_level(ENCODER_L_GPIO)) {
+        pulse_count_l++;
+        last_l_us = now;
+    }
+}
+
+static void IRAM_ATTR encoder_r_isr_handler(void* arg) {
+    uint64_t now = esp_timer_get_time();
+    if (now - last_r_us > 5000 && gpio_get_level(ENCODER_R_GPIO)) {
+        pulse_count_r++;
+        last_r_us = now;
+    }
+}
+
+void encoder_init() {
     // Configure encoder GPIO
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << ENCODER_L_GPIO), // which GPIO to configure
@@ -43,20 +58,10 @@ void encoder_init(void) {
     prev_time = esp_timer_get_time();
 }
 
-// ISR: Called on each encoder pulse
-void IRAM_ATTR encoder_l_isr_handler(void* arg) {
-    uint64_t now = esp_timer_get_time();
-    if (now - last_l_us > 5000 && gpio_get_level(ENCODER_L_GPIO)) {
-        pulse_count_l++;
-        last_l_us = now;
-    }
-}
-
-void IRAM_ATTR encoder_r_isr_handler(void* arg) {
-    pulse_count_r++;
-}
 
 void encoder_task(void *args) {
+    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(SPEED_CALC_INTERVAL_MS));
 
