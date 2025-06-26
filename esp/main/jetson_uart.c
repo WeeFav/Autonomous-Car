@@ -11,8 +11,7 @@
 #define RX_GPIO 18
 #define UART_BUFFER_SIZE (1024 * 2)
 
-const static char *TAG = "jetson_uart";
-
+static const char *TAG = "jetson_uart";
 static QueueHandle_t uart_event_queue;
 
 void uart_init() {
@@ -83,9 +82,5 @@ void jetson_uart_tx_task(void *param) {
             uart_write_bytes(UART_NUM_1, (const char *)&msg.size, sizeof(msg.size));
             uart_write_bytes(UART_NUM_1, (const char *)msg.payload, msg.size);
         }
-
-        // char buf[] = "Hello Jetson";
-        // uart_write_bytes(UART_NUM_1, (const char *)buf, strlen(buf));
-        // vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
