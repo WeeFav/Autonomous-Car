@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <string.h>
+#include <thread>
 
 enum MessageType {
     MSG_TYPE_XBOX,
@@ -99,53 +100,58 @@ int uart_init(const char* device) {
     return fd;
 }
 
-void send_data(int fd, const std::string& msg) {
-    int bytes_to_write = write(fd, msg.c_str(), msg.size());
-    if (bytes_to_write < 0) {
-        std::cout << "UART TX error" << std::endl;
-    }
-}
-
 void receive_data(int fd) {
-    // char buf[256];
-    // int n = read(fd, buf, sizeof(buf));
-    // if (n > 0) {
-    //     buf[n] = '\0';
-    //     std::cout << "Received: " << buf << std::endl;
-    // }    
+    std::cout << "Receive thread spawned" << std::endl;
 
     int n;
     MessageType type;
     uint16_t size;
     uint8_t payload[24];
+    
+    while (1) {
+        n = read(fd, &type, sizeof(type));
+        // std::cout << "first n: " << n << std::endl;
+        // std::cout << "type: " << type << std::endl;
 
-    n = read(fd, &type, sizeof(type));
-    // std::cout << "first n: " << n << std::endl;
-    // std::cout << "type: " << type << std::endl;
+        n = read(fd, &size, sizeof(size));
+        // std::cout << "second n: " << n << std::endl;
+        // std::cout << "size: " << size << std::endl;
 
-    n = read(fd, &size, sizeof(size));
-    // std::cout << "second n: " << n << std::endl;
-    // std::cout << "size: " << size << std::endl;
+        n = read(fd, payload, size);
+        // std::cout << "third n: " << n << std::endl;
 
-    n = read(fd, payload, size);
-    // std::cout << "third n: " << n << std::endl;
+        if (type == MSG_TYPE_IMU) {
+            imu_input_t imu;
+            memcpy(&imu, payload, sizeof(imu));
+            std::cout << "accel_x: " << imu.accel_x << std::endl;
+            std::cout << "accel_y: " << imu.accel_y << std::endl;
+            std::cout << "accel_z: " << imu.accel_z << std::endl;
 
-    if (type == MSG_TYPE_IMU) {
-        imu_input_t imu;
-        memcpy(&imu, payload, sizeof(imu));
-        std::cout << "accel_x: " << imu.accel_x << std::endl;
-        std::cout << "accel_y: " << imu.accel_y << std::endl;
-        std::cout << "accel_z: " << imu.accel_z << std::endl;
+            std::cout << "gyro_x: " << imu.gyro_x << std::endl;
+            std::cout << "gyro_y: " << imu.gyro_y << std::endl;
+            std::cout << "gyro_z: " << imu.gyro_z << std::endl;
+        }
+        else if (type == MSG_TYPE_XBOX) {
+            xbox_input_t report;
+            memcpy(&report, payload, sizeof(report));
+            std::cout << "D-Pad: " << static_cast<int>(report.dpad) << std::endl;
+        }
 
-        std::cout << "gyro_x: " << imu.gyro_x << std::endl;
-        std::cout << "gyro_y: " << imu.gyro_y << std::endl;
-        std::cout << "gyro_z: " << imu.gyro_z << std::endl;
+        usleep(10000); // sleep for 10 ms 
     }
-    else if (type == MSG_TYPE_XBOX) {
-        xbox_input_t report;
-        memcpy(&report, payload, sizeof(report));
-        std::cout << "D-Pad: " << static_cast<int>(report.dpad) << std::endl;
-    }   
+}
+
+void send_data(int fd, const std::string& msg) {
+    std::cout << "Send thread spawned" << std::endl;
+
+    while (1) {
+        int bytes_to_write = write(fd, msg.c_str(), msg.size());
+        if (bytes_to_write < 0) {
+            std::cout << "UART TX error" << std::endl;
+        }
+
+        sleep(1); // sleep for 1 s
+    }
 }
 
 int main() {
@@ -155,10 +161,11 @@ int main() {
         return -1;
     }
 
-    while (1) {
-        send_data(fd, "Hello ESP32\n");
-        receive_data(fd);
-    }
+    std::thread reader(receive_data, fd);
+    std::thread sender(send_data, fd, "Hello ESP32\n");
+
+    reader.join();
+    sender.join();
 
     close(fd);
     return 0;

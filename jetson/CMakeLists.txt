@@ -11,3 +11,4 @@ add_executable(server server.cpp)
 add_executable(uart uart.cpp)
 
 target_link_libraries(server ${OpenCV_LIBS})
+target_link_libraries(uart pthread)
