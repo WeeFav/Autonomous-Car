@@ -7,8 +7,8 @@
 #include "freertos/task.h"
 #include "utils.h"
 
-#define TX_GPIO 17
-#define RX_GPIO 18
+#define TX_GPIO 17 // To GPIO 10 on Jetson
+#define RX_GPIO 18 // To GPIO 8 on Jetson
 #define UART_BUFFER_SIZE (1024 * 2)
 
 static const char *TAG = "jetson_uart";
