@@ -61,8 +61,8 @@ void app_main(void)
     xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
     xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
     // xTaskCreatePinnedToCore(imu_task, "imu_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(encoder_task, "encoder_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    // xTaskCreatePinnedToCore(encoder_task, "encoder_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
     // xTaskCreatePinnedToCore(ina_task, "ina_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(ultrasonic_task, "ultrasonic_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+    // xTaskCreatePinnedToCore(ultrasonic_task, "ultrasonic_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
 }
 

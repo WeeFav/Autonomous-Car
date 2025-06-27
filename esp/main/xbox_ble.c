@@ -42,7 +42,7 @@ static int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error,
 static int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg);
 static int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg);
 static int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
-static void ble_store_config_init();
+void ble_store_config_init(); // For some reason the compiler can't pick up this definition, so manually define. Can't be static because it is defined elsewhere 
 
 static void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
