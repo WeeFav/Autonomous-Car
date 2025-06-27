@@ -29,30 +29,41 @@
 
 static const char *TAG = "xbox_ble";
 static uint16_t conn_handle;
-static uint16_t end_handle = 32;
 static xbox_input_t prev = {0};
-static xbox_ble_task_args_t *xbox_ble_task_args;
+static QueueHandle_t xbox_input_queue;
+static QueueHandle_t uart_tx_queue;
 
-void on_stack_reset(int reason) {
+static void on_stack_reset(int reason);
+static void on_stack_sync();
+static void ble_host_task(void *param);
+static void start_scan();
+static int gap_event_handler(struct ble_gap_event *event, void *arg);
+static int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_svc *service, void *arg);
+static int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg);
+static int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg);
+static int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg);
+static void ble_store_config_init();
+
+static void on_stack_reset(int reason) {
     /* On reset, print reset reason to console */
     // on_stack_reset is called when host resets BLE stack due to errors
     ESP_LOGI(TAG, "nimble stack reset, reset reason: %d", reason);
 }
 
-void on_stack_sync(void) {
+static void on_stack_sync() {
     /* On stack sync, do advertising initialization */
     // on_stack_sync is called when host has synced with controller
     start_scan();
 }
 
-void ble_host_task(void *param) {
+static void ble_host_task(void *param) {
     ESP_LOGI(TAG, "BLE Host Task started");
     nimble_port_run(); // starts the BLE host stack, blocks and runs indefinitely
     nimble_port_freertos_deinit();
 }
 
 // Start BLE scan
-void start_scan(void) {
+static void start_scan() {
     int rc;
     uint8_t own_addr_type;
 
@@ -85,13 +96,12 @@ NimBLE applies an event-driven model to keep GAP service going
 gap_event_handler is a callback function registered when calling
 ble_gap_disc API and called when a GAP event arrives
 */
-int gap_event_handler(struct ble_gap_event *event, void *arg) {
+static int gap_event_handler(struct ble_gap_event *event, void *arg) {
     int rc;
     struct ble_hs_adv_fields fields;
     char name[BLE_HS_ADV_MAX_SZ + 1] = {0};
     uint8_t own_addr_type;
     struct ble_gap_conn_desc desc;
-    // char output[512];
 
     if (event->type != 12) {
         ESP_LOGI(TAG, "GAP Event: %d", event->type);
@@ -190,26 +200,26 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
             // Process only if the notification comes from xbox HID
             if (event->notify_rx.attr_handle == 30) {
                 xbox_input_t* report = (xbox_input_t*)event->notify_rx.om->om_data;
-                
+
                 if (compare_xbox_report(&prev, report)) {
                     // format_xbox_report(output, report);
                     // ESP_LOGI(TAG, "Report: \n%s", output);
 
                     // Send to motor
-                    if (xQueueSend(xbox_ble_task_args->xbox_input_queue, (void *)report, 0) != pdTRUE) {
+                    if (xQueueSend(xbox_input_queue, (void *)report, portMAX_DELAY) != pdTRUE) {
                         ESP_LOGI(TAG, "Queue full\n");
                     }
 
-                    // // Send to UART
-                    // uart_tx_message_t msg;
-                    // msg.type = MSG_TYPE_XBOX;
-                    // msg.size = sizeof(*report);
-                    // memcpy(msg.payload, report, sizeof(*report));
+                    // Send to UART
+                    uart_tx_message_t msg;
+                    msg.type = MSG_TYPE_XBOX;
+                    msg.size = sizeof(*report);
+                    memcpy(msg.payload, report, sizeof(*report));
 
-                    // if (xQueueSend(xbox_ble_task_args->uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
-                    //     ESP_LOGI(TAG, "Queue full\n");
-                    // }
-                    // ESP_LOGI(TAG, "xbox controller input sent to queue");
+                    if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
+                        ESP_LOGI(TAG, "Queue full\n");
+                    }
+                    ESP_LOGI(TAG, "xbox controller input sent to queue");
 
                     prev = *report;
                 }
@@ -240,7 +250,7 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
     return 0;
 }
 
-int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_svc *service, void *arg) {
+static int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_svc *service, void *arg) {
     switch (error->status) {
         case 0:
             ESP_LOGI(TAG, "Service discovered: UUID=0x%04x, start_handle=%d, end_handle=%d", 
@@ -266,7 +276,7 @@ int disc_svc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const 
     return 0;
 }
 
-int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg) {
+static int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const struct ble_gatt_chr *chr, void *arg) {
     switch (error->status) {
         case 0:
             ESP_LOGI(TAG, "Characteristic discovered: UUID=0x%04x, handle=%d, value_handle=%d, properties=0x%X", 
@@ -285,7 +295,7 @@ int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const 
             descriptors to find CCCD. We need to write to CCCD to enable notifications.
             */ 
             if ((ble_uuid_u16(&chr->uuid.u) == XBOX_REPORT_UUID) && (chr->properties & BLE_GATT_CHR_PROP_NOTIFY)) {
-                ble_gattc_disc_all_dscs(conn_handle, chr->def_handle, end_handle, disc_desc_cb, NULL);
+                ble_gattc_disc_all_dscs(conn_handle, chr->def_handle, 32, disc_desc_cb, NULL);
             }
 
             break;
@@ -300,7 +310,7 @@ int disc_chr_cb(uint16_t conn_handle, const struct ble_gatt_error *error, const 
     return 0;
 }
 
-int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg) {
+static int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint16_t chr_val_handle, const struct ble_gatt_dsc *dsc, void *arg) {
     int rc;
     uint8_t value[2];
 
@@ -333,7 +343,7 @@ int disc_desc_cb(uint16_t conn_handle, const struct ble_gatt_error *error, uint1
     return 0;
 }
 
-int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg) {
+static int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg) {
     if (error->status == 0) {
         ESP_LOGI(TAG, "Successfully subscribed to notifications");
     } else {
@@ -341,26 +351,6 @@ int notify_event_cb(uint16_t conn_handle, const struct ble_gatt_error *error, st
     }
     return 0;    
 }
-
-/*
-int report_map_read_cb(uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg) {
-    if (error->status == 0 && attr != NULL) {
-        ESP_LOGI(TAG, "Report Map length: %d", attr->om->om_len);
-        
-        uint8_t *data = attr->om->om_data;
-        for (int i = 0; i < attr->om->om_len; i++) {
-            printf("%02X ", data[i]);
-        }
-        printf("\n");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to read Report Map: %d", error->status);
-
-    }
-
-    return 0;
-}
-*/
 
 void xbox_ble_init() {
     esp_err_t ret;
@@ -419,7 +409,14 @@ void xbox_ble_init() {
 }
 
 void xbox_ble_task(void *param) {
-    xbox_ble_task_args = (xbox_ble_task_args_t *)param;
+    xbox_ble_task_args_t *xbox_ble_task_args = (xbox_ble_task_args_t *)param;
+    
+    if (xbox_ble_task_args->xbox_input_queue == NULL) {
+        ESP_LOGE(TAG, "xbox_input_queue is NULL");
+    }
+
+    xbox_input_queue = xbox_ble_task_args->xbox_input_queue;
+    uart_tx_queue = xbox_ble_task_args->uart_tx_queue;
 
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host

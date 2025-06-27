@@ -7,12 +7,11 @@
 #include "freertos/task.h"
 #include "utils.h"
 
-#define TX_GPIO 17
-#define RX_GPIO 18
+#define TX_GPIO 17 // To GPIO 10 on Jetson
+#define RX_GPIO 18 // To GPIO 8 on Jetson
 #define UART_BUFFER_SIZE (1024 * 2)
 
-const static char *TAG = "jetson_uart";
-
+static const char *TAG = "jetson_uart";
 static QueueHandle_t uart_event_queue;
 
 void uart_init() {
@@ -44,7 +43,7 @@ void uart_init() {
 
 void jetson_uart_rx_task(void *param) {
     uart_event_t event;
-    uint8_t rx_data[UART_BUFFER_SIZE];
+    uint8_t rx_data[128];
 
     while (1) {
         // Wait for UART event
@@ -67,6 +66,7 @@ void jetson_uart_rx_task(void *param) {
                     break;
             }
         }
+
     }
 }
 
@@ -82,9 +82,5 @@ void jetson_uart_tx_task(void *param) {
             uart_write_bytes(UART_NUM_1, (const char *)&msg.size, sizeof(msg.size));
             uart_write_bytes(UART_NUM_1, (const char *)msg.payload, msg.size);
         }
-
-        // char buf[] = "Hello Jetson";
-        // uart_write_bytes(UART_NUM_1, (const char *)buf, strlen(buf));
-        // vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }

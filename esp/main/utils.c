@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include "utils.h"
+#include "driver/gpio.h"
+#include "led_strip.h"
 
 void format_xbox_report(char *output, const xbox_input_t *report) {
     sprintf(output,
@@ -81,4 +83,25 @@ bool compare_xbox_report(const xbox_input_t *prev, const xbox_input_t *curr) {
 
     // If all relevant fields are equal
     return false;
+}
+
+void disable_led(void)
+{
+    led_strip_handle_t led_strip;
+    
+    /* LED strip initialization with the GPIO and pixels number*/
+    led_strip_config_t strip_config = {
+        .strip_gpio_num = 38,
+        .max_leds = 1, // at least one LED on board
+    };
+
+    led_strip_rmt_config_t rmt_config = {
+        .resolution_hz = 10 * 1000 * 1000, // 10MHz
+        .flags.with_dma = false,
+    };
+
+    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
+
+    /* Set all LED off to clear all pixels */
+    led_strip_clear(led_strip);
 }

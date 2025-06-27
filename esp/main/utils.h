@@ -59,13 +59,13 @@ typedef struct {
 } imu_input_t;
 
 typedef struct {
-    QueueHandle_t xbox_input_queue;
-    QueueHandle_t uart_tx_queue;
-} xbox_ble_task_args_t;
+    float voltage, current;
+} ina_input_t;
 
 typedef enum {
     MSG_TYPE_XBOX,
-    MSG_TYPE_IMU
+    MSG_TYPE_IMU,
+    MSG_TYPE_INA
 } MessageType;
 
 typedef struct {
@@ -74,7 +74,13 @@ typedef struct {
     uint8_t payload[24]; // maximum struct size is imu_input_t (24 bytes)
 } uart_tx_message_t;
 
+typedef struct {
+    QueueHandle_t xbox_input_queue;
+    QueueHandle_t uart_tx_queue;
+} xbox_ble_task_args_t;
+
 void format_xbox_report(char *output, const xbox_input_t *report);
 bool compare_xbox_report(const xbox_input_t *prev, const xbox_input_t *curr);
+void disable_led(void);
 
 #endif

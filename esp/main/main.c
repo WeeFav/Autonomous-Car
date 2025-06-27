@@ -2,12 +2,16 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "disable_led_strip.h"
 #include "motor_pwm.h"
 #include "xbox_ble.h"
 #include "imu.h"
+#include "ina.h"
 #include "jetson_uart.h"
 #include "utils.h"
+#include "encoder.h"
+#include "i2c_master.h"
+#include "esp_log.h"
+#include "ultrasonic.h"
 
 void app_main(void)
 {
@@ -35,17 +39,30 @@ void app_main(void)
     So put all initalization in app_main
     */
     // pwm
-    init_pwm_dual();
-    init_direction_dual();
+    init_pwm();
+    init_direction();
     // ble
     xbox_ble_init();
     // uart
     uart_init();
+    // encoder
+    encoder_init();
+    // i2c
+    i2c_master_init();
+    // imu
+    imu_init();
+    // ina
+    ina_init();
+    // ultrasonic
+    ultrasonic_init();
 
     xTaskCreatePinnedToCore(xbox_ble_task, "xbox_ble_task", 4096, xbox_ble_task_args, 3, NULL, PRO_CPU_NUM);
     xTaskCreatePinnedToCore(motor_pwm_task, "motor_pwm_task", 4096, xbox_input_queue, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 2048, NULL, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 2048, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(imu_task, "imu_task", 2048, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    // xTaskCreatePinnedToCore(imu_task, "imu_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(encoder_task, "encoder_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    // xTaskCreatePinnedToCore(ina_task, "ina_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(ultrasonic_task, "ultrasonic_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
 }
 

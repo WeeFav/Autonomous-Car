@@ -22,15 +22,14 @@
 
 static const char *TAG = "motor_pwm";
 
-static mcpwm_timer_handle_t timer = NULL;
-static mcpwm_oper_handle_t operators = NULL;
-static mcpwm_cmpr_handle_t comparatorA = NULL;
-static mcpwm_cmpr_handle_t comparatorB = NULL;
-static mcpwm_gen_handle_t generatorA = NULL;
-static mcpwm_gen_handle_t generatorB = NULL;
-static xbox_input_t report;
+static mcpwm_timer_handle_t timer;
+static mcpwm_oper_handle_t operators;
+static mcpwm_cmpr_handle_t comparatorA;
+static mcpwm_cmpr_handle_t comparatorB;
+static mcpwm_gen_handle_t generatorA;
+static mcpwm_gen_handle_t generatorB;
 
-void init_pwm_dual(void)
+void init_pwm()
 {
     // Timer //
     ESP_LOGI(TAG, "Create timer and operator");
@@ -92,7 +91,7 @@ void init_pwm_dual(void)
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP));   
 }
 
-void init_direction_dual(void) {
+void init_direction() {
     gpio_reset_pin(IN1_GPIO);
     gpio_reset_pin(IN2_GPIO);
     gpio_reset_pin(IN3_GPIO);
@@ -103,7 +102,7 @@ void init_direction_dual(void) {
     gpio_set_direction(IN4_GPIO, GPIO_MODE_OUTPUT);
 }
 
-void set_pwm_A(int duty_cycle) {
+static void set_pwm_A(int duty_cycle) {
     if (duty_cycle < 0) {
         duty_cycle = 0;
     }
@@ -113,7 +112,7 @@ void set_pwm_A(int duty_cycle) {
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorA, duty_cycle * 10)); 
 }
 
-void set_pwm_B(int duty_cycle) {
+static void set_pwm_B(int duty_cycle) {
     if (duty_cycle < 0) {
         duty_cycle = 0;
     }
@@ -123,7 +122,7 @@ void set_pwm_B(int duty_cycle) {
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorB, duty_cycle * 10)); 
 }
 
-void set_direction_A(int dir) {
+static void set_direction_A(int dir) {
     if (dir == 1) {
         gpio_set_level(IN1_GPIO, 1);
         gpio_set_level(IN2_GPIO, 0);
@@ -138,7 +137,7 @@ void set_direction_A(int dir) {
     }
 }
 
-void set_direction_B(int dir) {
+static void set_direction_B(int dir) {
     if (dir == 1) {
         gpio_set_level(IN3_GPIO, 1);
         gpio_set_level(IN4_GPIO, 0);
@@ -155,10 +154,10 @@ void set_direction_B(int dir) {
 
 void motor_pwm_task(void *param) {
     QueueHandle_t xbox_input_queue = (QueueHandle_t)param;
+    xbox_input_t report;
 
     while (1) {
         if (xQueueReceive(xbox_input_queue, (void *)&report, portMAX_DELAY) == pdTRUE) {
-            ESP_LOGI(TAG, "Received xbox controller input");
             ESP_LOGI(TAG, "D-Pad: %u\n", report.dpad);
             if (report.dpad == 1) {
                 set_pwm_A(100);
