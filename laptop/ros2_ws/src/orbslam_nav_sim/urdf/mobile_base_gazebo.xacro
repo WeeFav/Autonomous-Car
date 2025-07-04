@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- For Gazebo  -->
+
+  <gazebo reference="base_link">
+    <material>Gazebo/Red</material>
+  </gazebo>
+  
+  <gazebo reference="right_wheel">
+    <material>Gazebo/Red</material>
+  </gazebo>
+  
+  <gazebo reference="left_wheel">
+    <material>Gazebo/Red</material>
+  </gazebo>
+  
+  <gazebo reference="caster_wheel">
+    <material>Gazebo/Red</material>
+    <mu1 value="0.1" />
+    <mu2 value="0.1" />
+  </gazebo>
+
+  <gazebo>
+    <plugin name="gazebo_ros_diff_drive" filename="libgazebo_ros_diff_drive.so">
+      <!-- Update rate in Hz -->
+      <update_rate>50</update_rate>
+      <!-- wheels -->
+      <left_joint>base_left_wheel_joint</left_joint>
+      <right_joint>base_right_wheel_joint</right_joint>
+      <!-- kinematics -->
+      <wheel_separation>0.45</wheel_separation>
+      <wheel_diameter>0.1</wheel_diameter>
+      <!-- input -->
+      <command_topic>cmd_vel</command_topic>
+      <!-- output -->
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>true</publish_odom_tf>
+      <publish_wheel_tf>true</publish_wheel_tf>
+      <odometry_topic>odom</odometry_topic>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_footprint</robot_base_frame>
+    </plugin>
+  </gazebo>
+
+  <!-- camera -->
+  <gazebo reference="camera_link">
+    <sensor type="camera" name="camera1">
+      <update_rate>30.0</update_rate>
+      <camera name="head">
+        <horizontal_fov>1.08</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.02</near>
+          <far>100</far>
+        </clip>
+      </camera>
+      <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
+        <alwaysOn>true</alwaysOn>
+        <updateRate>0.0</updateRate>
+        <cameraName>camera1</cameraName>
+        <imageTopicName>image_raw</imageTopicName>
+        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+        <frameName>camera_link</frameName>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- IMU -->
+  <gazebo reference="imu_link">
+    <gravity>true</gravity>
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>200</update_rate>
+      <visualize>true</visualize>
+      <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+        <ros>
+           <namespace>/</namespace>
+           <remapping>~/out:=imu</remapping>
+        </ros>
+        <topicName>imu</topicName>
+        <bodyName>imu_link</bodyName>
+        <updateRateHZ>200.0</updateRateHZ>
+        <gaussianNoise>0.0</gaussianNoise>
+        <xyzOffset>0 0 0</xyzOffset>
+        <rpyOffset>0 0 0</rpyOffset>
+        <frameName>imu_link</frameName>
+      </plugin>
+      <pose>0 0 0 0 0 0</pose>
+    </sensor>
+  </gazebo>
+
+</robot>

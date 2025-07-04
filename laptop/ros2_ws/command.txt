@@ -1,0 +1,9 @@
+colcon build --packages-select orbslam_nav_sim
+source ~/.bashrc
+
+ros2 launch orbslam_nav_sim sim_launch.py
+
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+
+WAYLAND_DISPLAY=0 ros2 run orbslam3 mono-inertial /home/marvin/orb_slam3_ros2/ORB_SLAM3/Vocabulary/ORBvoc.txt /home/marvin/ros2_ws/src/orbslam_nav_sim/Gazebo.yaml
+WAYLAND_DISPLAY=0 ros2 run orbslam3 mono /home/marvin/orb_slam3_ros2/ORB_SLAM3/Vocabulary/ORBvoc.txt /home/marvin/ros2_ws/src/orbslam_nav_sim/Gazebo.yaml
