@@ -40,7 +40,6 @@ link_directories(
 add_executable(mono
   src/monocular/mono.cpp
   src/monocular/monocular-slam-node.cpp
-  src/monocular/pointcloud-publish-node.cpp
 )
 ament_target_dependencies(mono rclcpp sensor_msgs cv_bridge ORB_SLAM3 Pangolin OpenCV PCL pcl_conversions)
 

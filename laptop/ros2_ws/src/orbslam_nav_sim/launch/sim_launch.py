@@ -3,13 +3,14 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, Command
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import LogInfo
 
 def generate_launch_description():
     ld = LaunchDescription()
 
     # find path to package
     orbslam_nav_sim_pkg_path = FindPackageShare('orbslam_nav_sim')
-
+    
     # join paths together
     urdf_path = PathJoinSubstitution([orbslam_nav_sim_pkg_path, 'urdf', 'my_robot.urdf.xacro'])
 

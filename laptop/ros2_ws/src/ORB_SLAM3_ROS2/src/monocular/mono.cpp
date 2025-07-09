@@ -5,7 +5,6 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "monocular-slam-node.hpp"
-#include "pointcloud-publish-node.hpp"
 
 #include "System.h"
 
@@ -24,15 +23,13 @@ int main(int argc, char **argv)
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     bool visualization = true;
     ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::MONOCULAR, visualization);
+    
+    // SLAM.ActivateLocalizationMode();
 
-    auto slam_node = std::make_shared<MonocularSlamNode>(&SLAM);
-    auto pub_node = std::make_shared<PointcloudPubNode>(&SLAM);
+    auto node = std::make_shared<MonocularSlamNode>(&SLAM);
     std::cout << "============================ " << std::endl;\
 
-    rclcpp::executors::SingleThreadedExecutor exec;
-    exec.add_node(slam_node);
-    exec.add_node(pub_node);
-    exec.spin();
+    rclcpp::spin(node);
     rclcpp::shutdown();
 
     return 0;
