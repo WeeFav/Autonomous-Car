@@ -20,3 +20,5 @@ ros2 bag play /home/marvin/Autonomous-Car/laptop/ros2_ws/src/orbslam_nav_sim/sma
 rviz2 -d /home/marvin/Autonomous-Car/laptop/ros2_ws/src/pointcloud_to_grid/rviz.rviz
 
 taskkill /f /im wslservice.exe
+
+ros2 run camera_tcp camera_publisher
