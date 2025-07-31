@@ -4,7 +4,7 @@
 int main()
 {
     // Open a video file
-    cv::VideoCapture cap("/home/marvin/Autonomous-Car/laptop/tcp/output.avi");
+    cv::VideoCapture cap("/home/marvin/Autonomous-Car/laptop/tcp/build/output.avi");
     if (!cap.isOpened()) {
         std::cerr << "Error: Cannot open video file" << std::endl;
         return -1;

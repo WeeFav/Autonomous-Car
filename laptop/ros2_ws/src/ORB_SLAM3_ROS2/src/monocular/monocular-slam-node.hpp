@@ -37,6 +37,8 @@ class MonocularSlamNode : public rclcpp::Node {
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr m_image_subscriber;
 
         ORB_SLAM3::Atlas* mpAtlas;
+        ORB_SLAM3::Tracking* mpTracker;
+
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_publisher;
         rclcpp::TimerBase::SharedPtr timer_;
         void PublishPointcloud();
