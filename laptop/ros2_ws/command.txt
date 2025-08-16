@@ -7,6 +7,7 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 
 WAYLAND_DISPLAY=0 ros2 run orbslam3 mono-inertial /home/marvin/ORB_SLAM3/Vocabulary/ORBvoc.txt /home/marvin/Autonomous-Car/laptop/ros2_ws/src/orbslam_nav_sim/Gazebo.yaml
 WAYLAND_DISPLAY=0 ros2 run orbslam3 mono /home/marvin/ORB_SLAM3/Vocabulary/ORBvoc.txt /home/marvin/Autonomous-Car/laptop/ros2_ws/src/orbslam_nav_sim/Gazebo.yaml
+WAYLAND_DISPLAY=0 ros2 run orbslam3 mono /home/marvin/ORB_SLAM3/Vocabulary/ORBvoc.txt /home/marvin/Autonomous-Car/laptop/ros2_ws/src/camera_tcp/raspberry.yaml
 
 WAYLAND_DISPLAY=0 ros2 run orbslam3 mono /home/marvin/ORB_SLAM3/Vocabulary/ORBvoc.txt /home/marvin/ORB_SLAM3/Examples/Monocular/EuRoC.yaml
 ros2 bag play /home/marvin/ORB_SLAM3/datasets/EuRoc/V1_02_medium --topics /cam0/image_raw --remap /cam0/image_raw:=/camera1/image_raw
@@ -16,7 +17,11 @@ ros2 launch pointcloud_to_grid rviz.launch.py
 
 ros2 bag record -o small_house_bag /map_points
 ros2 bag play /home/marvin/Autonomous-Car/laptop/ros2_ws/src/orbslam_nav_sim/small_house_bag
+ros2 bag play /home/marvin/Autonomous-Car/laptop/ros2_ws/src/camera_tcp/raspberry_bag
 
 rviz2 -d /home/marvin/Autonomous-Car/laptop/ros2_ws/src/pointcloud_to_grid/rviz.rviz
+rviz2 -d /home/marvin/Autonomous-Car/laptop/ros2_ws/src/camera_tcp/rviz.rviz
 
 taskkill /f /im wslservice.exe
+
+ros2 run camera_tcp camera_publisher

@@ -32,6 +32,13 @@ int main() {
         return 1;
     }
 
+    cv::Size frame_size(640, 480);
+    cv::VideoWriter writer("output.avi", cv::VideoWriter::fourcc('M','J','P','G'), 8, frame_size);
+    if (!writer.isOpened()) {
+        std::cerr << "Error: Cannot open video file for write" << std::endl;
+        return 1;
+    }
+
     // Start receive
 
     while (true) {
@@ -57,11 +64,17 @@ int main() {
             std::cerr << "Failed to decode image\n";
         }
         else {
+            writer.write(img);
+
             cv::imshow("Received Image", img);
-            cv::waitKey(1);
         }
+
+         // Stop if ESC pressed
+        if (cv::waitKey(1) == 27) break;
     }
 
+    writer.release();
+    cv::destroyAllWindows();
     close(sock);
     return 0;
 }

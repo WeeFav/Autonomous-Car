@@ -62,7 +62,7 @@ int main() {
 
     // GStreamer pipeline string for the Raspberry Pi camera on Jetson Nano
     std::string pipeline = "nvarguscamerasrc sensor-id=0 ! "
-                           "video/x-raw(memory:NVMM), width=1280, height=720, format=NV12, framerate=8/1 ! "
+                           "video/x-raw(memory:NVMM), width=640, height=480, format=NV12, framerate=8/1 ! "
                            "nvvidconv flip-method=2 ! "
                            "video/x-raw, format=BGRx ! "
                            "videoconvert ! "

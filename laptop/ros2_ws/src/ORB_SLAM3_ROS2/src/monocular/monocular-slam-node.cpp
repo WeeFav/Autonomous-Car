@@ -13,11 +13,13 @@ MonocularSlamNode::MonocularSlamNode(ORB_SLAM3::System* pSLAM) : Node("ORB_SLAM3
     );
 
     mpAtlas = m_SLAM->GetAtlas();
-    pointcloud_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>("map_points", 10);
-    timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(1000),  // 1 Hz
-        std::bind(&MonocularSlamNode::PublishPointcloud, this)
-    );
+    mpTracker = m_SLAM->GetTracker();
+
+    // pointcloud_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>("map_points", 10);
+    // timer_ = this->create_wall_timer(
+    //     std::chrono::milliseconds(1000),  // 1 Hz
+    //     std::bind(&MonocularSlamNode::PublishPointcloud, this)
+    // );
 
     std::cout << "slam changed" << std::endl;
 }
@@ -44,8 +46,10 @@ void MonocularSlamNode::GrabImage(const ImageMsg::SharedPtr msg) {
         return;
     }
 
+    std::cout<<"======================================================================"<<std::endl;
     std::cout<<"one frame has been sent"<<std::endl;
     m_SLAM->TrackMonocular(m_cvImPtr->image, Utility::StampToSec(msg->header.stamp));
+    std::cout<<"======================================================================"<<std::endl;
 }
 
 void MonocularSlamNode::PublishPointcloud() {
