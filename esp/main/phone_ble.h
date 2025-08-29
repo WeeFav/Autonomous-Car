@@ -1,7 +1,7 @@
-#ifndef XBOX_BLE_H
-#define XBOX_BLE_H
+#ifndef PHONE_BLE_H
+#define PHONE_BLE_H
 
-void xbox_ble_init();
-void xbox_ble_task(void *param);
+void bt_init();
+void bt_task(void *param);
 
 #endif

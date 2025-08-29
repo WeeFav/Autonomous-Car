@@ -30,8 +30,16 @@ static uint8_t own_addr_type;
 static uint8_t speed_val[4] = "0";
 static uint8_t direction_val[4] = "0";
 
+static int speed_control(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg);
+static int direction_control(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg);
+static void on_stack_sync();
+static void start_advertising();
+static int gap_event_handler(struct ble_gap_event *event, void *arg);
+static void ble_host_task(void *param);
+void ble_store_config_init(); // For some reason the compiler can't pick up this definition, so manually define. Can't be static because it is defined elsewhere 
+
 /* GATT server definition */
-static const struct ble_gatt_svc_def gatt_svcs[] {
+static const struct ble_gatt_svc_def gatt_svcs[] = {
     {
         /*** Service: Car Control ***/
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
@@ -41,19 +49,25 @@ static const struct ble_gatt_svc_def gatt_svcs[] {
                 /* Characteristic: Speed */
                 .uuid = BLE_UUID16_DECLARE(SPEED_CHAR_UUID),
                 .access_cb = speed_control,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE
             },
             {
                 /* Characteristic: Direction */
                 .uuid = BLE_UUID16_DECLARE(STEER_CHAR_UUID),
                 .access_cb = direction_control,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE
             },
-            {0}, /* No more characteristics */
-        },
+            {0} /* No more characteristics */
+        }
     },
-    {0}, /* No more services */  
+    {0} /* No more services */  
 };
+
+static void ble_host_task(void *param) {
+    ESP_LOGI(TAG, "BLE Host Task started");
+    nimble_port_run(); // starts the BLE host stack, blocks and runs indefinitely
+    nimble_port_freertos_deinit();
+}
 
 static int speed_control(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg) {
     switch (ctxt->op) {
@@ -90,11 +104,6 @@ static void on_stack_sync() {
     /* On stack sync, do advertising initialization */
     // on_stack_sync is called when host has synced with controller
     int rc = 0;
-    rc = ble_hs_util_ensure_addr(0);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "device does not have any available bt address!");
-        return;
-    }
 
     /* Figure out BT address to use while advertising (no privacy for now) */
     rc = ble_hs_id_infer_auto(0, &own_addr_type);
@@ -107,7 +116,7 @@ static void on_stack_sync() {
 }
 
 
-static void start_advertising(void) {
+static void start_advertising() {
     int rc;
     
     // GAP - device name definition
@@ -149,10 +158,46 @@ static void start_advertising(void) {
  * ble_gap_adv_start API and called when a GAP event arrives
  */
 static int gap_event_handler(struct ble_gap_event *event, void *arg) {
-    
+    switch (event->type) {
+        case BLE_GAP_EVENT_CONNECT:
+            if (event->connect.status == 0) {
+                ESP_LOGI(TAG, "Connection established");
+            }
+            else {
+                ESP_LOGE(TAG, "Error: Connection failed; status=%d; restart advertising", event->connect.status);
+                start_advertising();
+            }
+            return 0;
+
+        case BLE_GAP_EVENT_DISCONNECT:
+            ESP_LOGI(TAG, "Disconnected. (reason: %d). restart advertising", event->disconnect.reason);
+            start_advertising();
+            return 0;
+
+        case BLE_GAP_EVENT_ADV_COMPLETE:
+            ESP_LOGI(TAG, "Advertising complete; restarting");
+            start_advertising();
+            return 0;
+
+        case BLE_GAP_EVENT_SUBSCRIBE:
+            /* Print subscription info to log */
+            ESP_LOGI(TAG,
+                    "subscribe event; conn_handle=%d attr_handle=%d "
+                    "reason=%d prevn=%d curn=%d previ=%d curi=%d",
+                    event->subscribe.conn_handle, event->subscribe.attr_handle,
+                    event->subscribe.reason, event->subscribe.prev_notify,
+                    event->subscribe.cur_notify, event->subscribe.prev_indicate,
+                    event->subscribe.cur_indicate);
+            return 0;
+
+        default:
+            ESP_LOGI(TAG, "Event %d", event->type);
+            return 0;
+    }
 }
 
-void app_main() {
+
+void phone_ble_init() {
     esp_err_t ret;
 
     ret = nvs_flash_init();
@@ -188,5 +233,13 @@ void app_main() {
     /* NimBLE host configuration initialization */
     /* Set host callbacks */
     ble_hs_cfg.sync_cb = on_stack_sync; // Called when BLE host syncs with controller
-     
+    
+    /* Store host configuration */
+    ble_store_config_init();     
+}
+
+void phone_ble_task() {
+    nimble_port_freertos_init(ble_host_task);
+
+    vTaskDelete(NULL); // Task no longer needed, NimBLE runs its own task
 }
