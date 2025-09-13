@@ -15,84 +15,51 @@ class CameraPublisher : public rclcpp::Node
 {
 public:
     CameraPublisher() : Node("camera_publisher") {
-        publisher_ = this->create_publisher<sensor_msgs::msg::Image>("camera1/image_raw", 10);
 
-        // create socket
-        sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock == -1) {
-            RCLCPP_ERROR(this->get_logger(), "Socket creation failed.");
-            throw std::runtime_error("Socket creation failed");
+        // GStreamer pipeline
+        std::string pipeline =
+            "udpsrc port=5000 caps=\"application/x-rtp, media=video, encoding-name=H264, payload=96\" ! "
+            "rtph264depay ! avdec_h264 ! videoconvert ! appsink";
+
+        publisher = this->create_publisher<sensor_msgs::msg::Image>("camera1/image_raw", 10);
+
+        cap = cv::VideoCapture(pipeline, cv::CAP_GSTREAMER);
+        if (!cap.isOpened())
+        {
+            RCLCPP_ERROR(this->get_logger(), "Failed to open video capture");
+            rclcpp::shutdown();
         }
 
-        // define server ip and port
-        std::string ip_address = "192.168.0.106"; // server's ip
-        int port = 8000; // server's port
-        sockaddr_in server_addr; // structure to hold the ip address and port for the socket connection
-        server_addr.sin_family = AF_INET; // ipv4
-        server_addr.sin_port = htons(port); // port
-        inet_pton(AF_INET, ip_address.c_str(), &server_addr.sin_addr); // ip
+        RCLCPP_INFO(this->get_logger(), "OK");
 
-        // connect socket to server
-        int connect_res = connect(sock, (sockaddr*)&server_addr, sizeof(server_addr));
-        if (connect_res == -1) {
-            RCLCPP_ERROR(this->get_logger(), "Connect failed.");
-            close(sock);    
-            throw std::runtime_error("Connect failed");
-        }
-
-        // Start dedicated thread for receiving data
-        recv_thread = std::thread(&CameraPublisher::receive_loop, this);
+        // Timer to fetch frames at ~30 Hz
+        timer = this->create_wall_timer(std::chrono::milliseconds(33), std::bind(&CameraPublisher::timerCallback, this));
         
-    }
-
-    ~CameraPublisher() {
-        close(sock);
-        if (recv_thread.joinable()) {
-            recv_thread.join();
-        }
     }
     
 private:
-    void receive_loop() {
-        while (rclcpp::ok()) {
-            // receive image size
-            uint32_t img_size_net;
-            recv(sock, &img_size_net, sizeof(img_size_net), 0);
-            uint32_t img_size = ntohl(img_size_net); // convert from network byte to local byte order
+    void timerCallback() {
 
-            // receive image
-            std::vector<uchar> buf(img_size);
-            size_t bytes_received = 0;
-            while (bytes_received < img_size) {
-                ssize_t bytes = recv(sock, buf.data() + bytes_received, img_size - bytes_received, 0);
-                if (bytes <= 0) {
-                    break;
-                }
-                bytes_received += bytes;
-            }
-
-            // decode image
-            cv::Mat img = cv::imdecode(buf, cv::IMREAD_COLOR);
-            if (img.empty()) {
-                RCLCPP_WARN(this->get_logger(), "Failed to decode image");
-                continue;
-            }
-            // else {
-            //     cv::imshow("Received Image", img);
-            //     cv::waitKey(1);
-            // }
-
-            // publish
-            auto msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", img).toImageMsg();
-            msg->header.stamp = this->get_clock()->now();
-            msg->header.frame_id = "camera";
-            publisher_->publish(*msg);
+        cv::Mat frame;
+        if (!cap.read(frame))
+        {
+            RCLCPP_WARN(this->get_logger(), "Failed to read frame");
+            return;
         }
+
+        // Convert OpenCV frame to ROS Image message
+        auto msg = cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", frame).toImageMsg();
+        msg->header.stamp = this->now();
+        msg->header.frame_id = "camera1";
+        
+        // Publish
+        publisher->publish(*msg);     
+           
     }
 
-    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr publisher_;
-    std::thread recv_thread;
-    int sock;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr publisher;
+    cv::VideoCapture cap;
+    rclcpp::TimerBase::SharedPtr timer;
 
 };
 
