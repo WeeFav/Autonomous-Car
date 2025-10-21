@@ -24,4 +24,4 @@ rviz2 -d /home/marvin/Autonomous-Car/laptop/ros2_ws/src/camera_tcp/rviz.rviz
 
 taskkill /f /im wslservice.exe
 
-ros2 run camera_tcp camera_publisher
+ros2 run camera_tcp camera_publisher_tcp
