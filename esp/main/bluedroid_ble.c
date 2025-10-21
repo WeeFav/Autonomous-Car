@@ -78,7 +78,6 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
 
 static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
     switch (event) {
-        
         case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: // Advertising data set, now start advertising.
             ESP_LOGI(TAG, "Advertising data set, status %d", param->adv_data_cmpl.status);
             adv_config_done &= (~ADV_CONFIG_FLAG);
@@ -109,6 +108,21 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
                     param->update_conn_params.latency,
                     param->update_conn_params.timeout);
             break;
+        case ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT:
+            if (param->read_rssi_cmpl.status == ESP_BT_STATUS_SUCCESS) {
+                ESP_LOGI(TAG, "RSSI for device %02x:%02x:%02x:%02x:%02x:%02x is %d dBm",
+                        param->read_rssi_cmpl.remote_addr[0],
+                        param->read_rssi_cmpl.remote_addr[1],
+                        param->read_rssi_cmpl.remote_addr[2],
+                        param->read_rssi_cmpl.remote_addr[3],
+                        param->read_rssi_cmpl.remote_addr[4],
+                        param->read_rssi_cmpl.remote_addr[5],
+                        param->read_rssi_cmpl.rssi);
+            } else {
+                ESP_LOGE(TAG, "Failed to read RSSI, status %d", param->read_rssi_cmpl.status);
+            }
+            break;
+
         default:
             break;                    
     }
@@ -282,13 +296,14 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
         break;
 
     case ESP_GATTS_CONNECT_EVT: // Client connected
+        esp_ble_gap_read_rssi(param->connect.remote_bda);
         esp_ble_conn_update_params_t conn_params = {0};
         memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
         /* For the IOS system, please reference the apple official documents about the ble connection parameters restrictions. */
         conn_params.latency = 0;
-        conn_params.max_int = 0x20;    // max_int = 0x20*1.25ms = 40ms
-        conn_params.min_int = 0x10;    // min_int = 0x10*1.25ms = 20ms
-        conn_params.timeout = 400;    // timeout = 400*10ms = 4000ms
+        conn_params.min_int = 0x18;    // min_int = 0x10*1.25ms = 20ms
+        conn_params.max_int = 0x28;    // max_int = 0x20*1.25ms = 40ms
+        conn_params.timeout = 600;    // timeout = 400*10ms = 4000ms
         ESP_LOGI(TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
                  param->connect.conn_id,
                  param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
@@ -394,6 +409,9 @@ void bt_init()
     if (ret) {
         ESP_LOGE(TAG, "set local  MTU failed, error code = %x", ret);
     }    
+
+    esp_log_level_set("GAP", ESP_LOG_DEBUG);
+    esp_log_level_set("GATT", ESP_LOG_DEBUG);
 
     ESP_LOGI(TAG, "BLE GATT server initialized. Waiting for connections...");    
 }

@@ -180,32 +180,34 @@ void motor_pwm_task(void *param) {
         // vTaskDelay(pdMS_TO_TICKS(2000));
                
         if (xQueueReceive(xbox_input_queue, (void *)&report, portMAX_DELAY) == pdTRUE) {
-            ESP_LOGI(TAG, "D-Pad: %u\n", report.dpad);
-            ESP_LOGI(TAG, "Right Trigger: %u\n", report.right_trigger);
-            ESP_LOGI(TAG, "Right Trigger Mapped: %u\n", mapToPercent(report.right_trigger));
+            uint16_t percent = mapToPercent(report.right_trigger);
+
+            // ESP_LOGI(TAG, "D-Pad: %u\n", report.dpad);
+            // ESP_LOGI(TAG, "Right Trigger: %u\n", report.right_trigger);
+            // ESP_LOGI(TAG, "Right Trigger Mapped: %u\n", percent);
 
             if (report.dpad == 1) {
-                set_pwm_A(report.right_trigger);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_FORWARD);
-                set_pwm_B(report.right_trigger);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_FORWARD);
             }
             else if (report.dpad == 3) {
-                set_pwm_A(report.right_trigger);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_BACKWARD);
-                set_pwm_B(report.right_trigger);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_FORWARD);
             }
             else if (report.dpad == 5) {
-                set_pwm_A(report.right_trigger);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_BACKWARD);
-                set_pwm_B(report.right_trigger);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_BACKWARD);
             }
             else if (report.dpad == 7) {
-                set_pwm_A(report.right_trigger);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_FORWARD);
-                set_pwm_B(report.right_trigger);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_BACKWARD);
             }
             else {
