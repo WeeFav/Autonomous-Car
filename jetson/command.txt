@@ -1,0 +1,3 @@
+gst-launch-1.0 nvarguscamerasrc sensor-id=0 ! 'video/x-raw(memory:NVMM), width=640, height=480, format=NV12, framerate=30/1' ! nvvidconv flip-method=2 ! omxh264enc bitrate=4000000 ! rtph264pay config-interval=1 pt=96 ! udpsink host=192.168.0.118 port=5000
+gst-launch-1.0 udpsrc port=5000 ! udpsink host=172.21.231.3 port=5000
+gst-launch-1.0 udpsrc port=5000 caps="application/x-rtp, media=video, encoding-name=H264, payload=96" ! rtph264depay ! avdec_h264 ! videoconvert ! autovideosink sync=false

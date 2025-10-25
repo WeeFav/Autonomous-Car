@@ -7,6 +7,17 @@
 #include <string.h>
 #include <string>
 #include <opencv2/opencv.hpp>
+#include <netinet/tcp.h>
+
+bool send_all(int sock, const uchar* data, size_t size) {
+    size_t total_sent = 0;
+    while (total_sent < size) {
+        ssize_t sent = send(sock, data + total_sent, size - total_sent, 0);
+        if (sent <= 0) return false; // Connection lost or error
+        total_sent += sent;
+    }
+    return true;
+}
 
 int main() {
     // create listening socket
@@ -41,6 +52,12 @@ int main() {
         return 1;
     }
 
+    int flag = 1;
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+
+    int snd_buf = 1 * 1024 * 1024; // 1 MB
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &snd_buf, sizeof(snd_buf));
+
     char host[NI_MAXHOST]; // client's remote name
     char service[NI_MAXSERV]; // client's port
 
@@ -62,7 +79,7 @@ int main() {
 
     // GStreamer pipeline string for the Raspberry Pi camera on Jetson Nano
     std::string pipeline = "nvarguscamerasrc sensor-id=0 ! "
-                           "video/x-raw(memory:NVMM), width=640, height=480, format=NV12, framerate=8/1 ! "
+                           "video/x-raw(memory:NVMM), width=1640, height=1232, format=NV12, framerate=30/1 ! "
                            "nvvidconv flip-method=2 ! "
                            "video/x-raw, format=BGRx ! "
                            "videoconvert ! "
@@ -85,17 +102,26 @@ int main() {
             break;
         }
 
+        cv::Mat resized;
+        cv::resize(frame, resized, cv::Size(640, 480), 0, 0, cv::INTER_LINEAR);
+
         // Encode image as JPEG
         std::vector<uchar> buf;
-        cv::imencode(".jpg", frame, buf);
+        std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 70}; // adjust quality
+        cv::imencode(".jpg", resized, buf, params);
 
-        // send image size
+        // // send image size
+        // uint32_t img_size = buf.size();
+        // uint32_t img_size_net = htonl(img_size); // Convert to network byte order
+        // send(sock, &img_size_net, sizeof(img_size_net), 0);
+
+        // // send image
+        // send(sock, buf.data(), img_size, 0);
+
         uint32_t img_size = buf.size();
-        uint32_t img_size_net = htonl(img_size); // Convert to network byte order
-        send(sock, &img_size_net, sizeof(img_size_net), 0);
-
-        // send image
-        send(sock, buf.data(), img_size, 0);
+        uint32_t img_size_net = htonl(img_size);
+        if (!send_all(sock, reinterpret_cast<uchar*>(&img_size_net), sizeof(img_size_net))) break;
+        if (!send_all(sock, buf.data(), img_size)) break;
 
         std::cout << "Send frame " << std::to_string(counter) << std::endl;
         counter++;
