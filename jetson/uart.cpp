@@ -4,10 +4,24 @@
 #include <iostream>
 #include <string.h>
 #include <thread>
+#include <atomic>
+#include <csignal>
+#include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/screen.hpp>  // for Full, Screen
+#include "ftxui/component/component.hpp"
+#include "ftxui/component/loop.hpp"
+#include "ftxui/component/screen_interactive.hpp"
+#include "ftxui/dom/node.hpp"
+
+using namespace ftxui;
+
+std::atomic<bool> running(true);
 
 enum MessageType {
     MSG_TYPE_XBOX,
-    MSG_TYPE_IMU
+    MSG_TYPE_ENCODER,
+    MSG_TYPE_IMU,
+    MSG_TYPE_INA
 };
 
 #pragma pack(push, 1)  // Ensure packed structure
@@ -54,10 +68,38 @@ struct xbox_input_t {
 };
 #pragma pack(pop)
 
+#pragma pack(push, 1)  // Ensure packed structure
+struct encoder_input_t {
+    int left_rpm, right_rpm;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)  // Ensure packed structure
 struct imu_input_t {
     float accel_x, accel_y, accel_z;
     float gyro_x, gyro_y, gyro_z;
 };
+#pragma pack(pop)
+
+#pragma pack(push, 1)  // Ensure packed structure
+struct ina_input_t {
+    float left_voltage, left_current;
+    float right_voltage, right_current;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct uart_tx_message_t {
+    MessageType type;
+    uint8_t payload[24]; // maximum struct size is imu_input_t (24 bytes)
+};
+#pragma pack(pop)
+
+static float mapToPercent(uint16_t value) {
+    if (value < 0) value = 0;
+    if (value > 1023) value = 1023;
+    return ((value * 100) / 1023) / 100.0;    
+}
 
 int uart_init(const char* device) {
     // Open device as a file
@@ -104,69 +146,176 @@ void receive_data(int fd) {
     std::cout << "Receive thread spawned" << std::endl;
 
     int n;
-    MessageType type;
-    uint16_t size;
-    uint8_t payload[24];
-    
-    while (1) {
-        n = read(fd, &type, sizeof(type));
-        // std::cout << "first n: " << n << std::endl;
-        // std::cout << "type: " << type << std::endl;
+    uart_tx_message_t msg;
 
-        n = read(fd, &size, sizeof(size));
-        // std::cout << "second n: " << n << std::endl;
-        // std::cout << "size: " << size << std::endl;
+    int xbox_direction = 0;
+    float xbox_speed_percent = 0;
+    int left_rpm = 0;
+    int right_rpm = 0;
+    float accel_x = 0;
+    float accel_y = 0;
+    float accel_z = 0;
+    float gyro_x = 0;
+    float gyro_y = 0;
+    float gyro_z = 0;
+    float left_voltage = 0; 
+    float left_current = 0; 
+    float right_voltage = 0;
+    float right_current = 0;
 
-        n = read(fd, payload, size);
-        // std::cout << "third n: " << n << std::endl;
+    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());    
+    std::string reset_position;
 
-        if (type == MSG_TYPE_IMU) {
-            imu_input_t imu;
-            memcpy(&imu, payload, sizeof(imu));
-            std::cout << "accel_x: " << imu.accel_x << std::endl;
-            std::cout << "accel_y: " << imu.accel_y << std::endl;
-            std::cout << "accel_z: " << imu.accel_z << std::endl;
+    while (running) {
+        n = read(fd, &msg, sizeof(msg));
 
-            std::cout << "gyro_x: " << imu.gyro_x << std::endl;
-            std::cout << "gyro_y: " << imu.gyro_y << std::endl;
-            std::cout << "gyro_z: " << imu.gyro_z << std::endl;
-        }
-        else if (type == MSG_TYPE_XBOX) {
+        if (msg.type == MSG_TYPE_XBOX) {
             xbox_input_t report;
-            memcpy(&report, payload, sizeof(report));
-            std::cout << "D-Pad: " << static_cast<int>(report.dpad) << std::endl;
+            memcpy(&report, msg.payload, sizeof(report));
+
+            // update variables
+            xbox_speed_percent = mapToPercent(report.right_trigger);
+            xbox_direction = report.dpad;
+        }
+        else if (msg.type == MSG_TYPE_ENCODER) {
+            encoder_input_t motor_speed;
+            memcpy(&motor_speed, msg.payload, sizeof(motor_speed));
+
+            // update variables
+            left_rpm = motor_speed.left_rpm;
+            right_rpm = motor_speed.right_rpm;
+        }
+        else if (msg.type == MSG_TYPE_IMU) {
+            imu_input_t imu;
+            memcpy(&imu, msg.payload, sizeof(imu));
+
+            // update variables
+            accel_x =  imu.accel_x;
+            accel_y =  imu.accel_y;
+            accel_z =  imu.accel_z;
+            gyro_x = imu.gyro_x;
+            gyro_y = imu.gyro_y;
+            gyro_z = imu.gyro_z;
+        }
+        else if (msg.type == MSG_TYPE_INA) {
+            ina_input_t ina;
+            memcpy(&ina, msg.payload, sizeof(ina));
+
+            // update variables
+            left_voltage = ina.left_voltage;
+            left_current = ina.left_current;
+            right_voltage = ina.right_voltage;
+            right_current = ina.right_current;
         }
 
+        // ============ FTXUI ============
+
+        // IMU data tiles
+        auto imu_tile = vbox({
+            text("IMU (6 DOF)") | bold | center,
+            separator(),
+            text("Accel X: " + std::to_string(accel_x)),
+            text("Accel Y: " + std::to_string(accel_y)),
+            text("Accel Z: " + std::to_string(accel_z)),
+            separator(),
+            text("Gyro X: " + std::to_string(gyro_x)),
+            text("Gyro Y: " + std::to_string(gyro_y)),
+            text("Gyro Z: " + std::to_string(gyro_z)),
+        }) | border | size(WIDTH, EQUAL, 28);
+
+        // Motor tiles
+        auto motor_tile = [&](std::string name, float voltage, float current, int rpm) {
+            // std::ostringstream oss_v, oss_c, oss_r;
+            // oss_v << std::fixed << std::setprecision(2) << voltage;
+            // oss_c << std::fixed << std::setprecision(2) << current;
+            // oss_r << std::fixed << std::setprecision(1) << rpm;
+
+            return vbox({
+                text(name) | bold | center,
+                separator(),
+                text("Voltage: " + std::to_string(voltage) + " V"),
+                text("Current: " + std::to_string(current) + " A"),
+                text("Speed: " + std::to_string(rpm) + " RPM"),
+            }) | border | size(WIDTH, EQUAL, 25);
+        };
+
+        auto motors = hbox({
+            motor_tile("Left Motor", left_voltage, left_current, left_rpm),
+            separator(),
+            motor_tile("Right Motor", right_voltage, right_current, right_rpm),
+        });
+
+        // Xbox direction buttons
+        auto render_button = [](std::string label, bool pressed) {
+            return text(label) |
+                center |
+                border |
+                bgcolor(pressed ? Color::Green : Color::GrayDark) |
+                size(WIDTH, EQUAL, 10) |
+                size(HEIGHT, EQUAL, 3);
+        };
+
+        auto up_box = render_button("UP", xbox_direction == 1);
+        auto right_box = render_button("RIGHT", xbox_direction == 3);
+        auto down_box = render_button("DOWN", xbox_direction == 5);
+        auto left_box = render_button("LEFT", xbox_direction == 7);
+
+        // Arrange in D-pad layout:
+        auto dpad = vbox({
+            hbox({ filler(), up_box, filler() }),
+            hbox({ left_box, filler(), right_box }),
+            hbox({ filler(), down_box, filler() }),
+        }) | border | center;
+
+        // Xbox trigger
+        auto trigger_gauge = vbox({
+            text("Speed") | center,
+            gaugeUp(xbox_speed_percent) | color(Color::BlueLight) | size(HEIGHT, EQUAL, 10) | border,
+            text(std::to_string(int(xbox_speed_percent * 100)) + "%") | center,
+        });
+
+        // Combine everything
+        auto layout = vbox({
+            text("🚗  Autonomous Car Dashboard") | bold | center,
+            separator(),
+            hbox({
+                imu_tile,
+                separator(),
+                motors,
+                dpad,
+                trigger_gauge
+            }),
+        }) | border;
+
+        Render(screen, layout);
+        std::cout << reset_position;
+        screen.Print();  
+        reset_position = screen.ResetPosition();
+
+        // std::cout << gyro_z << std::endl;
         usleep(10000); // sleep for 10 ms 
     }
-}
 
-void send_data(int fd, const std::string& msg) {
-    std::cout << "Send thread spawned" << std::endl;
-
-    while (1) {
-        int bytes_to_write = write(fd, msg.c_str(), msg.size());
-        if (bytes_to_write < 0) {
-            std::cout << "UART TX error" << std::endl;
-        }
-
-        sleep(1); // sleep for 1 s
-    }
+    std::cout << "Exiting receive thread..." << std::endl;
 }
 
 int main() {
-    int fd = uart_init("/dev/ttyTHS1");
+    int fd = uart_init("/dev/ttyTHS1"); // sudo ./uart
 
     if (fd == -1) {
         return -1;
     }
 
     std::thread reader(receive_data, fd);
-    std::thread sender(send_data, fd, "Hello ESP32\n");
+
+    // Watch for SIGINT (Ctrl+C)
+    std::signal(SIGINT, [](int) {
+        running = false;
+    });
 
     reader.join();
-    sender.join();
 
     close(fd);
+    std::cout << "end" << std::endl;
     return 0;
 }
