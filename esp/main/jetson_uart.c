@@ -78,9 +78,7 @@ void jetson_uart_tx_task(void *param) {
         uart_tx_message_t msg;
         if (xQueueReceive(uart_tx_queue, &msg, portMAX_DELAY) == pdTRUE) {
             // ESP_LOGI(TAG, "Writing...");
-            uart_write_bytes(UART_NUM_1, (const char *)&msg.type, sizeof(msg.type));
-            uart_write_bytes(UART_NUM_1, (const char *)&msg.size, sizeof(msg.size));
-            uart_write_bytes(UART_NUM_1, (const char *)msg.payload, msg.size);
+            uart_write_bytes(UART_NUM_1, (const char *)&msg, sizeof(msg));
         }
     }
 }

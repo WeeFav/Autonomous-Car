@@ -6,6 +6,8 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "encoder.h"
+#include "utils.h"
+#include <string.h>
 
 #define ENCODER_L_GPIO 36
 #define ENCODER_R_GPIO 37
@@ -18,6 +20,7 @@ static volatile int pulse_count_r = 0;
 static uint64_t prev_time = 0;
 static volatile uint64_t last_l_us = 0;
 static volatile uint64_t last_r_us = 0;
+static QueueHandle_t uart_tx_queue;
 
 // ISR: Called on each encoder pulse
 static void IRAM_ATTR encoder_l_isr_handler(void* arg) {
@@ -59,8 +62,10 @@ void encoder_init() {
 }
 
 
-void encoder_task(void *args) {
+void encoder_task(void *param) {
     portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+    uart_tx_queue = (QueueHandle_t)param;
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(SPEED_CALC_INTERVAL_MS));
@@ -77,7 +82,7 @@ void encoder_task(void *args) {
         pulse_count_r = 0;
         vPortExitCritical(&mux);
 
-        ESP_LOGI(TAG, "count_l: %d", count_l);
+        // ESP_LOGI(TAG, "count_l: %d", count_l);
 
         float seconds = elapsed_time / 1e6;
         float rps_l = (count_l / (float)PULSES_PER_REV) / seconds;
@@ -85,7 +90,20 @@ void encoder_task(void *args) {
         float rps_r = (count_r / (float)PULSES_PER_REV) / seconds;
         float rpm_r = rps_r * 60.0;
 
+        encoder_input_t motor_speed;
+        motor_speed.left_rpm = rpm_l;
+        motor_speed.right_rpm = rpm_r;
+
         ESP_LOGI(TAG, "Left RPM: %.2f", rpm_l);
         ESP_LOGI(TAG, "Right RPM: %.2f", rpm_r);
+
+        // send data to UART
+        uart_tx_message_t msg;
+        msg.type = MSG_TYPE_ENCODER;
+        memcpy(msg.payload, &motor_speed, sizeof(motor_speed));
+
+        if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
+            ESP_LOGI(TAG, "Queue full\n");
+        }
     }
 }

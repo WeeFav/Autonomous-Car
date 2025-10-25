@@ -213,7 +213,6 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
                     // Send to UART
                     uart_tx_message_t msg;
                     msg.type = MSG_TYPE_XBOX;
-                    msg.size = sizeof(*report);
                     memcpy(msg.payload, report, sizeof(*report));
 
                     if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {

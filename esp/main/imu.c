@@ -52,7 +52,13 @@ void imu_task(void *param) {
     imu_input_t imu;
 
     while (1) {
-        ESP_ERROR_CHECK(i2c_master_transmit_receive(dev_handle, write_buf, 1, raw_imu, sizeof(raw_imu), -1));
+        esp_err_t err = i2c_master_transmit_receive(dev_handle, write_buf, 1, raw_imu, sizeof(raw_imu), -1);
+        if (err != ESP_OK) {
+            ESP_LOGW("IMU", "I2C read failed: %s, retrying...", esp_err_to_name(err));
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+            continue;
+        }
+        // ESP_ERROR_CHECK(i2c_master_transmit_receive(dev_handle, write_buf, 1, raw_imu, sizeof(raw_imu), -1));
         
         int16_t accel_x = (int16_t)((raw_imu[0] << 8) | raw_imu[1]);
         int16_t accel_y = (int16_t)((raw_imu[2] << 8) | raw_imu[3]);
@@ -69,18 +75,17 @@ void imu_task(void *param) {
         imu.gyro_y = gyro_y / 65.5;
         imu.gyro_z = gyro_z / 65.5;
 
-        // send imu data to UART
-        // msg.type = MSG_TYPE_IMU;
-        // msg.size = sizeof(imu);
-        // memcpy(msg.payload, &imu, sizeof(imu));
-
-        // if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
-        //     ESP_LOGI(TAG, "Queue full\n");
-        // }
-
         ESP_LOGI("IMU", "Accel: X=%.2f, Y=%.2f, Z=%.2f | Gyro: X=%.2f, Y=%.2f, Z=%.2f",
                 imu.accel_x, imu.accel_y, imu.accel_z,
                 imu.gyro_x, imu.gyro_y, imu.gyro_z);
+
+        // send data to UART
+        msg.type = MSG_TYPE_IMU;
+        memcpy(msg.payload, &imu, sizeof(imu));
+
+        if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
+            ESP_LOGI(TAG, "Queue full\n");
+        }
 
         vTaskDelay(500 / portTICK_PERIOD_MS); // 500 ms
     }

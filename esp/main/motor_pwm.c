@@ -178,7 +178,7 @@ void motor_pwm_task(void *param) {
         // set_direction_B(MOTOR_FORWARD); 
 
         // vTaskDelay(pdMS_TO_TICKS(2000));
-               
+                   
         if (xQueueReceive(xbox_input_queue, (void *)&report, portMAX_DELAY) == pdTRUE) {
             uint16_t percent = mapToPercent(report.right_trigger);
 

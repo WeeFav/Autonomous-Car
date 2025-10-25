@@ -53,24 +53,36 @@ typedef struct __attribute__((packed)) {
 
 } xbox_input_t;
 
-typedef struct {
+// 4*2 = 8 bytes
+typedef struct __attribute__((packed)) {
+    int left_rpm, right_rpm;
+} encoder_input_t;
+
+// 4*6 = 24 bytes
+typedef struct __attribute__((packed)) {
     float accel_x, accel_y, accel_z;
     float gyro_x, gyro_y, gyro_z;
 } imu_input_t;
 
-typedef struct {
-    float voltage, current;
+// 4*4 = 16 bytes
+typedef struct __attribute__((packed)) {
+    float left_voltage, left_current;
+    float right_voltage, right_current;
 } ina_input_t;
+
+typedef struct __attribute__((packed)) {
+    float voltage, current;
+} single_ina_t;
 
 typedef enum {
     MSG_TYPE_XBOX,
+    MSG_TYPE_ENCODER,
     MSG_TYPE_IMU,
     MSG_TYPE_INA
 } MessageType;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     MessageType type;
-    uint16_t size;
     uint8_t payload[24]; // maximum struct size is imu_input_t (24 bytes)
 } uart_tx_message_t;
 
