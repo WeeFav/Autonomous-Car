@@ -70,13 +70,17 @@ void imu_task(void *param) {
         imu.gyro_z = gyro_z / 65.5;
 
         // send imu data to UART
-        msg.type = MSG_TYPE_IMU;
-        msg.size = sizeof(imu);
-        memcpy(msg.payload, &imu, sizeof(imu));
+        // msg.type = MSG_TYPE_IMU;
+        // msg.size = sizeof(imu);
+        // memcpy(msg.payload, &imu, sizeof(imu));
 
-        if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGI(TAG, "Queue full\n");
-        }
+        // if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
+        //     ESP_LOGI(TAG, "Queue full\n");
+        // }
+
+        ESP_LOGI("IMU", "Accel: X=%.2f, Y=%.2f, Z=%.2f | Gyro: X=%.2f, Y=%.2f, Z=%.2f",
+                imu.accel_x, imu.accel_y, imu.accel_z,
+                imu.gyro_x, imu.gyro_y, imu.gyro_z);
 
         vTaskDelay(500 / portTICK_PERIOD_MS); // 500 ms
     }

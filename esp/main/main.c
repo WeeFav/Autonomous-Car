@@ -12,6 +12,8 @@
 #include "i2c_master.h"
 #include "esp_log.h"
 #include "ultrasonic.h"
+// #include "phone_ble.h"
+// #include "bluedroid_ble.h"
 
 void app_main(void)
 {
@@ -41,11 +43,11 @@ void app_main(void)
     // pwm
     init_pwm();
     init_direction();
-    // ble
+    // xbox ble
     xbox_ble_init();
     // uart
     uart_init();
-    // encoder
+    // wheel encoder
     encoder_init();
     // i2c
     i2c_master_init();
@@ -57,12 +59,14 @@ void app_main(void)
     ultrasonic_init();
 
     xTaskCreatePinnedToCore(xbox_ble_task, "xbox_ble_task", 4096, xbox_ble_task_args, 3, NULL, PRO_CPU_NUM);
+    // xTaskCreatePinnedToCore(phone_ble_task, "phone_ble_task", 4096, NULL, 3, NULL, PRO_CPU_NUM);
     xTaskCreatePinnedToCore(motor_pwm_task, "motor_pwm_task", 4096, xbox_input_queue, 3, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+    // xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
     xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
     // xTaskCreatePinnedToCore(imu_task, "imu_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
     // xTaskCreatePinnedToCore(encoder_task, "encoder_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(ina_task, "ina_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(ina_task, "ina_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
     // xTaskCreatePinnedToCore(ultrasonic_task, "ultrasonic_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+
 }
 

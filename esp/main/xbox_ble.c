@@ -219,7 +219,7 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
                     if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
                         ESP_LOGI(TAG, "Queue full\n");
                     }
-                    ESP_LOGI(TAG, "xbox controller input sent to queue");
+                    // ESP_LOGI(TAG, "xbox controller input sent to queue");
 
                     prev = *report;
                 }

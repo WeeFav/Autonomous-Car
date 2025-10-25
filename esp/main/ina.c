@@ -9,9 +9,9 @@
 #include "ina.h"
 #include "driver/i2c_master.h"
 
-#define INA219_ESP_ADDR 0x40
-#define INA219_LM_ADDR 0x41
-#define INA219_RM_ADDR 0x44
+// #define INA219_ESP_ADDR 0x40
+#define INA219_LM_ADDR 0x40
+// #define INA219_RM_ADDR 0x44
 
 static const char *TAG = "ina";
 
@@ -28,15 +28,16 @@ void ina_init() {
 
     // Configure ina devices
     dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    dev_cfg.device_address = INA219_ESP_ADDR;
     dev_cfg.scl_speed_hz = 100000; // 100kHz
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &esp_dev_handle));
+
+    // dev_cfg.device_address = INA219_ESP_ADDR;
+    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &esp_dev_handle));
 
     dev_cfg.device_address = INA219_LM_ADDR;
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &lm_dev_handle));
 
-    dev_cfg.device_address = INA219_RM_ADDR;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &rm_dev_handle));
+    // dev_cfg.device_address = INA219_RM_ADDR;
+    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &rm_dev_handle));
 }
 
 static void configure(i2c_master_dev_handle_t dev_handle) {
@@ -82,6 +83,9 @@ static ina_input_t read_ina(i2c_master_dev_handle_t dev_handle) {
     ina_input_t ina;
     ina.voltage = bus_voltage;
     ina.current = current;
+
+    ESP_LOGI(TAG, "Voltage=%.2f V, Current=%.2f mA", ina.voltage, ina.current);
+
     return ina;
 }
 
@@ -100,18 +104,18 @@ static void send_uart(ina_input_t ina) {
 void ina_task(void *param) {
     uart_tx_queue = (QueueHandle_t)param;
     
-    configure(esp_dev_handle);
+    // configure(esp_dev_handle);
     configure(lm_dev_handle);
-    configure(rm_dev_handle);
+    // configure(rm_dev_handle);
 
     while (1) {
-        ina_input_t esp_ina = read_ina(esp_dev_handle);
+        // ina_input_t esp_ina = read_ina(esp_dev_handle);
         ina_input_t lm_ina = read_ina(lm_dev_handle);
-        ina_input_t rm_ina = read_ina(rm_dev_handle);
+        // ina_input_t rm_ina = read_ina(rm_dev_handle);
 
-        send_uart(esp_ina);
-        send_uart(lm_ina);
-        send_uart(rm_ina);
+        // send_uart(esp_ina);
+        // send_uart(lm_ina);
+        // send_uart(rm_ina);
 
         vTaskDelay(500 / portTICK_PERIOD_MS); // 500 ms
     }

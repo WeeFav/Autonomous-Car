@@ -102,7 +102,7 @@ void init_direction() {
     gpio_set_direction(IN4_GPIO, GPIO_MODE_OUTPUT);
 }
 
-static void set_pwm_A(int duty_cycle) {
+static void set_pwm_A(uint16_t duty_cycle) {
     if (duty_cycle < 0) {
         duty_cycle = 0;
     }
@@ -112,7 +112,7 @@ static void set_pwm_A(int duty_cycle) {
     ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparatorA, duty_cycle * 10)); 
 }
 
-static void set_pwm_B(int duty_cycle) {
+static void set_pwm_B(uint16_t duty_cycle) {
     if (duty_cycle < 0) {
         duty_cycle = 0;
     }
@@ -152,35 +152,62 @@ static void set_direction_B(int dir) {
     }
 }
 
+static uint16_t mapToPercent(uint16_t value) {
+    if (value < 0) value = 0;
+    if (value > 1023) value = 1023;
+    return (value * 100) / 1023;    
+}
+
 void motor_pwm_task(void *param) {
     QueueHandle_t xbox_input_queue = (QueueHandle_t)param;
     xbox_input_t report;
 
     while (1) {
+        // set_pwm_A(100);
+        // set_direction_A(MOTOR_FORWARD);
+        // set_pwm_B(100);
+        // set_direction_B(MOTOR_FORWARD); 
+
+        // vTaskDelay(pdMS_TO_TICKS(2000));
+
+        // set_direction_A(MOTOR_FORWARD);
+        // set_direction_B(MOTOR_BACKWARD); 
+        // vTaskDelay(pdMS_TO_TICKS(2000));
+
+        // set_direction_A(MOTOR_BACKWARD);
+        // set_direction_B(MOTOR_FORWARD); 
+
+        // vTaskDelay(pdMS_TO_TICKS(2000));
+               
         if (xQueueReceive(xbox_input_queue, (void *)&report, portMAX_DELAY) == pdTRUE) {
-            ESP_LOGI(TAG, "D-Pad: %u\n", report.dpad);
+            uint16_t percent = mapToPercent(report.right_trigger);
+
+            // ESP_LOGI(TAG, "D-Pad: %u\n", report.dpad);
+            // ESP_LOGI(TAG, "Right Trigger: %u\n", report.right_trigger);
+            // ESP_LOGI(TAG, "Right Trigger Mapped: %u\n", percent);
+
             if (report.dpad == 1) {
-                set_pwm_A(100);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_FORWARD);
-                set_pwm_B(100);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_FORWARD);
             }
             else if (report.dpad == 3) {
-                set_pwm_A(100);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_BACKWARD);
-                set_pwm_B(100);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_FORWARD);
             }
             else if (report.dpad == 5) {
-                set_pwm_A(100);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_BACKWARD);
-                set_pwm_B(100);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_BACKWARD);
             }
             else if (report.dpad == 7) {
-                set_pwm_A(100);
+                set_pwm_A(percent);
                 set_direction_A(MOTOR_FORWARD);
-                set_pwm_B(100);
+                set_pwm_B(percent);
                 set_direction_B(MOTOR_BACKWARD);
             }
             else {

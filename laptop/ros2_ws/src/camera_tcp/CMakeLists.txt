@@ -20,8 +20,13 @@ add_executable(camera_publisher src/camera_publisher.cpp)
 ament_target_dependencies(camera_publisher rclcpp sensor_msgs cv_bridge)
 target_link_libraries(camera_publisher ${OpenCV_LIBRARIES})
 
+add_executable(camera_publisher_tcp src/camera_publisher_tcp.cpp)
+ament_target_dependencies(camera_publisher_tcp rclcpp sensor_msgs cv_bridge)
+target_link_libraries(camera_publisher_tcp ${OpenCV_LIBRARIES})
+
 install(TARGETS
   camera_publisher
+  camera_publisher_tcp
   DESTINATION lib/${PROJECT_NAME}
 )
 
