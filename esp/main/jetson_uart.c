@@ -71,8 +71,6 @@ void jetson_uart_rx_task(void *param) {
 }
 
 void jetson_uart_tx_task(void *param) {
-    QueueHandle_t uart_tx_queue = (QueueHandle_t)param;
-
     while (1) {
         // Handle outgoing messages from TX queue
         uart_tx_message_t msg;

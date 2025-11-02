@@ -1,0 +1,15 @@
+menu "Custom Configuration"
+
+    choice INPUT_SOURCE
+        prompt "Select input source for motor"
+        default INPUT_SOURCE_XBOX
+        help
+            Choose which input the motor task will receive data from.
+
+        config INPUT_SOURCE_XBOX
+            bool "Xbox controller"
+        config INPUT_SOURCE_PID
+            bool "PID controller"
+    endchoice
+
+endmenu

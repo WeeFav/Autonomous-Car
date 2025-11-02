@@ -87,12 +87,23 @@ typedef struct __attribute__((packed)) {
 } uart_tx_message_t;
 
 typedef struct {
-    QueueHandle_t xbox_input_queue;
-    QueueHandle_t uart_tx_queue;
-} xbox_ble_task_args_t;
+    uint8_t pwm;
+    uint8_t direction;
+} motor_input_t;
 
+// Global Variables
+extern QueueHandle_t motor_queue;
+extern QueueHandle_t uart_tx_queue;
+extern motor_input_t pid_xbox_input;
+extern SemaphoreHandle_t pid_xbox_mutex;
+extern uint16_t pid_encoder_input;
+extern SemaphoreHandle_t pid_encoder_mutex;
+
+
+// Global Functions
 void format_xbox_report(char *output, const xbox_input_t *report);
 bool compare_xbox_report(const xbox_input_t *prev, const xbox_input_t *curr);
 void disable_led(void);
+uint8_t mapToPercent(uint16_t value);
 
 #endif

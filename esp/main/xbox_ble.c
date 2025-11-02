@@ -18,6 +18,7 @@
 #include "xbox_ble.h"
 #include "utils.h"
 #include "esp_bt.h"
+#include "freertos/semphr.h"
 
 // Xbox Wireless Controller Service UUIDs
 #define XBOX_SERVICE_UUID           0x1812  // HID Service
@@ -30,8 +31,6 @@
 static const char *TAG = "xbox_ble";
 static uint16_t conn_handle;
 static xbox_input_t prev = {0};
-static QueueHandle_t xbox_input_queue;
-static QueueHandle_t uart_tx_queue;
 
 static void on_stack_reset(int reason);
 static void on_stack_sync();
@@ -205,10 +204,22 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
                     // format_xbox_report(output, report);
                     // ESP_LOGI(TAG, "Report: \n%s", output);
 
-                    // Send to motor
-                    if (xQueueSend(xbox_input_queue, (void *)report, portMAX_DELAY) != pdTRUE) {
-                        ESP_LOGI(TAG, "Queue full\n");
+                    motor_input_t input;
+                    input.pwm = mapToPercent(report->right_trigger);
+                    input.direction = report->dpad;
+                    
+                    #if defined(CONFIG_INPUT_SOURCE_XBOX)
+                        // Send to motor
+                        if (xQueueSend(motor_queue, &input, portMAX_DELAY) != pdTRUE) {
+                            ESP_LOGI(TAG, "Queue full\n");
+                        }
                     }
+                    #elif defined(CONFIG_INPUT_SOURCE_PID)
+                        if (xSemaphoreTake(pid_xbox_mutex, portMAX_DELAY) == pdTRUE) {
+                            pid_xbox_input = input;
+                            xSemaphoreGive(pid_xbox_mutex);
+                        }
+                    #endif
 
                     // Send to UART
                     uart_tx_message_t msg;
@@ -407,20 +418,10 @@ void xbox_ble_init() {
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9);
 }
 
-void xbox_ble_task(void *param) {
-    xbox_ble_task_args_t *xbox_ble_task_args = (xbox_ble_task_args_t *)param;
-    
-    if (xbox_ble_task_args->xbox_input_queue == NULL) {
-        ESP_LOGE(TAG, "xbox_input_queue is NULL");
-    }
-
-    xbox_input_queue = xbox_ble_task_args->xbox_input_queue;
-    uart_tx_queue = xbox_ble_task_args->uart_tx_queue;
-
+void xbox_ble_task(void *param) {    
     // Start the NimBLE host task (this handles the BLE events)
     // Creates a new FreeRTOS task to run the BLE host
     nimble_port_freertos_init(ble_host_task);
 
-    free(xbox_ble_task_args);
     vTaskDelete(NULL); // Task no longer needed, NimBLE runs its own task
 }

@@ -10,8 +10,9 @@
 #include "driver/i2c_master.h"
 
 #define MPU6050_ADDR 0x68
+#define INTERVAL_MS 10 // 100 Hz
 
-static const char *TAG = "imu";
+static const char *TAG = "IMU";
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t dev_handle;
 
@@ -28,8 +29,6 @@ void imu_init() {
 }
 
 void imu_task(void *param) {
-    QueueHandle_t uart_tx_queue = (QueueHandle_t)param;
-    
     // Write to imu to configure it
     // Configure power mode
     uint8_t write_buf[2] = {0x6B, 0x00}; // The packet must have an address followed by the data
@@ -68,14 +67,14 @@ void imu_task(void *param) {
         int16_t gyro_y = (int16_t)((raw_imu[10] << 8) | raw_imu[11]);
         int16_t gyro_z = (int16_t)((raw_imu[12] << 8) | raw_imu[13]);
 
-        imu.accel_x = accel_x / 16384.0;
-        imu.accel_y = accel_y / 16384.0;
-        imu.accel_z = accel_z / 16384.0;
+        imu.accel_x = accel_x / 16384.0 * 9.80665f;
+        imu.accel_y = accel_y / 16384.0 * 9.80665f;
+        imu.accel_z = accel_z / 16384.0 * 9.80665f;
         imu.gyro_x = gyro_x / 65.5;
         imu.gyro_y = gyro_y / 65.5;
         imu.gyro_z = gyro_z / 65.5;
 
-        ESP_LOGI("IMU", "Accel: X=%.2f, Y=%.2f, Z=%.2f | Gyro: X=%.2f, Y=%.2f, Z=%.2f",
+        ESP_LOGI(TAG, "Accel: X=%.2f, Y=%.2f, Z=%.2f | Gyro: X=%.2f, Y=%.2f, Z=%.2f",
                 imu.accel_x, imu.accel_y, imu.accel_z,
                 imu.gyro_x, imu.gyro_y, imu.gyro_z);
 
@@ -87,6 +86,6 @@ void imu_task(void *param) {
             ESP_LOGI(TAG, "Queue full\n");
         }
 
-        vTaskDelay(500 / portTICK_PERIOD_MS); // 500 ms
+        vTaskDelay(pdMS_TO_TICKS(INTERVAL_MS));
     }
 }

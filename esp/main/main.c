@@ -14,27 +14,46 @@
 #include "ultrasonic.h"
 // #include "phone_ble.h"
 // #include "bluedroid_ble.h"
+#include "pid.h"
+
+QueueHandle_t motor_queue;
+QueueHandle_t uart_tx_queue;
+SemaphoreHandle_t pid_xbox_mutex;
+SemaphoreHandle_t pid_encoder_mutex;
+motor_input_t pid_xbox_input;
+uint16_t pid_encoder_input;
 
 void app_main(void)
 {
     const static char *TAG = "app_main";
 
-    QueueHandle_t xbox_input_queue;
-    QueueHandle_t uart_tx_queue;
-
-    xbox_input_queue = xQueueCreate(10, sizeof(xbox_input_t));
-    if (xbox_input_queue == NULL) {
+    motor_queue = xQueueCreate(10, sizeof(motor_input_t));
+    if (motor_queue == NULL) {
         ESP_LOGE(TAG, "Failed to create queue");
     }
 
-    uart_tx_queue = xQueueCreate(20, sizeof(uart_tx_message_t));
+    uart_tx_queue = xQueueCreate(30, sizeof(uart_tx_message_t));
     if (uart_tx_queue == NULL) {
         ESP_LOGE(TAG, "Failed to create queue");
     }
 
-    xbox_ble_task_args_t *xbox_ble_task_args = malloc(sizeof(xbox_ble_task_args_t));
-    xbox_ble_task_args->xbox_input_queue = xbox_input_queue;
-    xbox_ble_task_args->uart_tx_queue = uart_tx_queue;
+    #ifdef CONFIG_INPUT_SOURCE_PID
+        pid_xbox_mutex = xSemaphoreCreateMutex();
+        if (pid_xbox_mutex == NULL) {
+            printf("Failed to create mutex!\n");
+            return;
+        }
+
+        pid_encoder_mutex = xSemaphoreCreateMutex();
+        if (pid_encoder_mutex == NULL) {
+            printf("Failed to create mutex!\n");
+            return;
+        }
+    #endif
+
+    pid_xbox_input.pwm = 0;
+    pid_xbox_input.direction = 0;
+    pid_encoder_input = 0;
 
     /*
     For some reason motor pwm needs to be initalized in app_main() or else there will be error
@@ -58,15 +77,18 @@ void app_main(void)
     // ultrasonic
     ultrasonic_init();
 
-    xTaskCreatePinnedToCore(xbox_ble_task, "xbox_ble_task", 4096, xbox_ble_task_args, 3, NULL, APP_CPU_NUM);
-    // xTaskCreatePinnedToCore(phone_ble_task, "phone_ble_task", 4096, NULL, 3, NULL, PRO_CPU_NUM);
-    xTaskCreatePinnedToCore(motor_pwm_task, "motor_pwm_task", 4096, xbox_input_queue, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(imu_task, "imu_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(encoder_task, "encoder_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(ina_task, "ina_task", 4096, uart_tx_queue, 3, NULL, tskNO_AFFINITY);
-    // xTaskCreatePinnedToCore(ultrasonic_task, "ultrasonic_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(jetson_uart_tx_task, "jetson_uart_tx_task", 4096, NULL, 4, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(xbox_ble_task, "xbox_ble_task", 4096, NULL, 3, NULL, APP_CPU_NUM);
+    xTaskCreatePinnedToCore(motor_pwm_task, "motor_pwm_task", 4096, NULL, 4, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(encoder_task, "encoder_task", 4096, NULL, 5, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(imu_task, "imu_task", 4096, NULL, 4, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(ina_task, "ina_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+    #ifdef CONFIG_INPUT_SOURCE_PID
+        xTaskCreatePinnedToCore(pid_task, "pid_task", 4096, NULL, 5, NULL, tskNO_AFFINITY);
+    #endif
 
+    // xTaskCreatePinnedToCore(phone_ble_task, "phone_ble_task", 4096, NULL, 3, NULL, PRO_CPU_NUM);
+    // xTaskCreatePinnedToCore(jetson_uart_rx_task, "jetson_uart_rx_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
+    // xTaskCreatePinnedToCore(ultrasonic_task, "ultrasonic_task", 4096, NULL, 3, NULL, tskNO_AFFINITY);
 }
 

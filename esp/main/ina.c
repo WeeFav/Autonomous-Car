@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -12,10 +13,10 @@
 // #define INA219_ESP_ADDR 0x40
 #define INA219_LM_ADDR 0x40
 #define INA219_RM_ADDR 0x40
+#define INTERVAL_MS 200 // 5 Hz
 
-static const char *TAG = "ina";
+static const char *TAG = "INA";
 
-static QueueHandle_t uart_tx_queue;
 static i2c_master_bus_handle_t bus_handle_0;
 static i2c_master_bus_handle_t bus_handle_1;
 static i2c_master_dev_handle_t lm_dev_handle;
@@ -77,18 +78,16 @@ static single_ina_t read_ina(i2c_master_dev_handle_t dev_handle) {
 
     // Read current
     // Ohm's law: I = V / R; R = 0.1Ω
-    float current = shunt_voltage / 0.1;
+    float current = shunt_voltage / 0.1; // in mA
 
     single_ina_t ina;
     ina.voltage = bus_voltage;
-    ina.current = current;
+    ina.current = fabs(current / 1000);
 
     return ina;
 }
 
-void ina_task(void *param) {
-    uart_tx_queue = (QueueHandle_t)param;
-    
+void ina_task(void *param) {    
     configure(lm_dev_handle);
     configure(rm_dev_handle);
 
@@ -96,8 +95,8 @@ void ina_task(void *param) {
         single_ina_t lm_ina = read_ina(lm_dev_handle);
         single_ina_t rm_ina = read_ina(rm_dev_handle);
 
-        ESP_LOGI(TAG, "Left Voltage=%.2f V, Current=%.2f mA", lm_ina.voltage, lm_ina.current);
-        ESP_LOGI(TAG, "Right Voltage=%.2f V, Current=%.2f mA", rm_ina.voltage, rm_ina.current);
+        ESP_LOGI(TAG, "Left Voltage=%.2f V, Current=%.2f A", lm_ina.voltage, lm_ina.current);
+        ESP_LOGI(TAG, "Right Voltage=%.2f V, Current=%.2f A", rm_ina.voltage, rm_ina.current);
         
         ina_input_t ina;
         ina.left_voltage = lm_ina.voltage;
@@ -114,6 +113,6 @@ void ina_task(void *param) {
             ESP_LOGI(TAG, "Queue full\n");
         }
 
-        vTaskDelay(500 / portTICK_PERIOD_MS); // 500 ms
+        vTaskDelay(pdMS_TO_TICKS(INTERVAL_MS)); // 500 ms
     }
 }

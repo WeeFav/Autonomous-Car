@@ -9,10 +9,10 @@
 #include "utils.h"
 #include <string.h>
 
-#define ENCODER_L_GPIO 36
-#define ENCODER_R_GPIO 37
+#define ENCODER_L_GPIO 37
+#define ENCODER_R_GPIO 36
 #define PULSES_PER_REV 20
-#define SPEED_CALC_INTERVAL_MS 1000  // How often to calculate speed
+#define SPEED_CALC_INTERVAL_MS 10  // 100 Hz
 
 static const char *TAG = "encoder";
 static volatile int pulse_count_l = 0;
@@ -20,7 +20,7 @@ static volatile int pulse_count_r = 0;
 static uint64_t prev_time = 0;
 static volatile uint64_t last_l_us = 0;
 static volatile uint64_t last_r_us = 0;
-static QueueHandle_t uart_tx_queue;
+static encoder_input_t motor_speed;
 
 // ISR: Called on each encoder pulse
 static void IRAM_ATTR encoder_l_isr_handler(void* arg) {
@@ -61,15 +61,10 @@ void encoder_init() {
     prev_time = esp_timer_get_time();
 }
 
-
 void encoder_task(void *param) {
     portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
-    uart_tx_queue = (QueueHandle_t)param;
-
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(SPEED_CALC_INTERVAL_MS));
-
         uint64_t curr_time = esp_timer_get_time();
         uint64_t elapsed_time = curr_time - prev_time;
         prev_time = curr_time;
@@ -90,12 +85,18 @@ void encoder_task(void *param) {
         float rps_r = (count_r / (float)PULSES_PER_REV) / seconds;
         float rpm_r = rps_r * 60.0;
 
-        encoder_input_t motor_speed;
+        #ifdef CONFIG_INPUT_SOURCE_PID
+            if (xSemaphoreTake(pid_encoder_mutex, portMAX_DELAY) == pdTRUE) {
+                pid_encoder_input = (uint16_t)((rpm_l + rpm_r) / 2);
+                xSemaphoreGive(pid_encoder_mutex);
+            }
+        #endif        
+        
         motor_speed.left_rpm = rpm_l;
         motor_speed.right_rpm = rpm_r;
 
-        ESP_LOGI(TAG, "Left RPM: %.2f", rpm_l);
-        ESP_LOGI(TAG, "Right RPM: %.2f", rpm_r);
+        // ESP_LOGI(TAG, "Left RPM: %.2f", rpm_l);
+        // ESP_LOGI(TAG, "Right RPM: %.2f", rpm_r);
 
         // send data to UART
         uart_tx_message_t msg;
@@ -105,5 +106,7 @@ void encoder_task(void *param) {
         if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
             ESP_LOGI(TAG, "Queue full\n");
         }
+
+        vTaskDelay(pdMS_TO_TICKS(SPEED_CALC_INTERVAL_MS));
     }
 }
