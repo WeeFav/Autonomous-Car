@@ -46,6 +46,12 @@ The power bank supply 5V to ESP32 and Jetson Nano. ESP32 consumes ~0.75W and Jet
 
 IMU and power monitor (INA219) uses I2C to communicate with microcontroller. Jetson use UART and Xbox controller use BLE.
 
+## Future Work
+- Profiling for RTOS
+- Monocular 3D map is too noisy for path planning. Consider building usable map with Semantic Segmentation-Based Occupancy Grid Map
+- Combine map with visual odometry for path planning
+- Obstacle avoidance via on board camera object detection
+
 ### System Overview
 
 <img width="1903" height="924" alt="system" src="https://github.com/user-attachments/assets/2fb3ffa1-1204-41dd-ad6d-9c4444813b89" />
