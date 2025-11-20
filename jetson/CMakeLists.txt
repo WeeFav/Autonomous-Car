@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include_directories(${OpenCV_INCLUDE_DIRS})
+
 include(FetchContent)
 FetchContent_Declare(ftxui
   GIT_REPOSITORY https://github.com/ArthurSonzogni/ftxui
@@ -15,16 +17,18 @@ FetchContent_Declare(ftxui
 FetchContent_MakeAvailable(ftxui)
 
 add_executable(server server.cpp)
-add_executable(uart uart.cpp)
-add_executable(calibrate_camera calibrate_camera.cpp)
-
 target_link_libraries(server ${OpenCV_LIBS})
 
-target_link_libraries(calibrate_camera ${OpenCV_LIBS} stdc++fs)
-
+add_executable(uart uart.cpp)
 target_link_libraries(uart PRIVATE
     pthread
     ftxui::component
     ftxui::dom
     ftxui::screen
 )
+
+add_executable(calibrate_camera calibrate_camera.cpp)
+target_link_libraries(calibrate_camera ${OpenCV_LIBS} stdc++fs)
+
+add_executable(vo vo.cpp)
+target_link_libraries(vo ${OpenCV_LIBS} stdc++fs)

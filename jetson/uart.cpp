@@ -202,9 +202,19 @@ void receive_data(int fd) {
             memcpy(&ina, msg.payload, sizeof(ina));
 
             // update variables
-            left_voltage = ina.left_voltage;
+            if (xbox_direction == 1) {
+                left_voltage = ina.left_voltage;
+                right_voltage = ina.left_voltage;
+            }
+            if (xbox_direction == 5) {
+                left_voltage = ina.right_voltage;
+                right_voltage = ina.right_voltage;
+            }
+            else {
+                left_voltage = ina.left_voltage;
+                right_voltage = ina.right_voltage;                
+            }
             left_current = ina.left_current;
-            right_voltage = ina.right_voltage;
             right_current = ina.right_current;
         }
 
@@ -214,13 +224,13 @@ void receive_data(int fd) {
         auto imu_tile = vbox({
             text("IMU (6 DOF)") | bold | center,
             separator(),
-            text("Accel X: " + std::to_string(accel_x)),
-            text("Accel Y: " + std::to_string(accel_y)),
-            text("Accel Z: " + std::to_string(accel_z)),
+            text("Accel X: " + std::to_string(accel_x) + " m/s²"),
+            text("Accel Y: " + std::to_string(accel_y) + " m/s²"),
+            text("Accel Z: " + std::to_string(accel_z) + " m/s²"),
             separator(),
-            text("Gyro X: " + std::to_string(gyro_x)),
-            text("Gyro Y: " + std::to_string(gyro_y)),
-            text("Gyro Z: " + std::to_string(gyro_z)),
+            text("Gyro X: " + std::to_string(gyro_x) + " °/s"),
+            text("Gyro Y: " + std::to_string(gyro_y) + " °/s"),
+            text("Gyro Z: " + std::to_string(gyro_z) + " °/s"),
         }) | border | size(WIDTH, EQUAL, 28);
 
         // Motor tiles
@@ -293,7 +303,7 @@ void receive_data(int fd) {
         reset_position = screen.ResetPosition();
 
         // std::cout << gyro_z << std::endl;
-        usleep(10000); // sleep for 10 ms 
+        // usleep(1000); // sleep for 10 ms 
     }
 
     std::cout << "Exiting receive thread..." << std::endl;
