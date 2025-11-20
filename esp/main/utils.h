@@ -53,34 +53,57 @@ typedef struct __attribute__((packed)) {
 
 } xbox_input_t;
 
-typedef struct {
+// 4*2 = 8 bytes
+typedef struct __attribute__((packed)) {
+    int left_rpm, right_rpm;
+} encoder_input_t;
+
+// 4*6 = 24 bytes
+typedef struct __attribute__((packed)) {
     float accel_x, accel_y, accel_z;
     float gyro_x, gyro_y, gyro_z;
 } imu_input_t;
 
-typedef struct {
-    float voltage, current;
+// 4*4 = 16 bytes
+typedef struct __attribute__((packed)) {
+    float left_voltage, left_current;
+    float right_voltage, right_current;
 } ina_input_t;
+
+typedef struct __attribute__((packed)) {
+    float voltage, current;
+} single_ina_t;
 
 typedef enum {
     MSG_TYPE_XBOX,
+    MSG_TYPE_ENCODER,
     MSG_TYPE_IMU,
     MSG_TYPE_INA
 } MessageType;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     MessageType type;
-    uint16_t size;
     uint8_t payload[24]; // maximum struct size is imu_input_t (24 bytes)
 } uart_tx_message_t;
 
 typedef struct {
-    QueueHandle_t xbox_input_queue;
-    QueueHandle_t uart_tx_queue;
-} xbox_ble_task_args_t;
+    uint8_t pwm;
+    uint8_t direction;
+} motor_input_t;
 
+// Global Variables
+extern QueueHandle_t motor_queue;
+extern QueueHandle_t uart_tx_queue;
+extern motor_input_t pid_xbox_input;
+extern SemaphoreHandle_t pid_xbox_mutex;
+extern uint16_t pid_encoder_input;
+extern SemaphoreHandle_t pid_encoder_mutex;
+
+
+// Global Functions
 void format_xbox_report(char *output, const xbox_input_t *report);
 bool compare_xbox_report(const xbox_input_t *prev, const xbox_input_t *curr);
 void disable_led(void);
+uint8_t mapToPercent(uint16_t value);
 
 #endif

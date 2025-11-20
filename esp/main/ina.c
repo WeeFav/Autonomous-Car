@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -11,33 +12,32 @@
 
 // #define INA219_ESP_ADDR 0x40
 #define INA219_LM_ADDR 0x40
-// #define INA219_RM_ADDR 0x44
+#define INA219_RM_ADDR 0x40
+#define INTERVAL_MS 200 // 5 Hz
 
-static const char *TAG = "ina";
+static const char *TAG = "INA";
 
-static QueueHandle_t uart_tx_queue;
-static i2c_master_bus_handle_t bus_handle;
-static i2c_master_dev_handle_t esp_dev_handle;
+static i2c_master_bus_handle_t bus_handle_0;
+static i2c_master_bus_handle_t bus_handle_1;
 static i2c_master_dev_handle_t lm_dev_handle;
 static i2c_master_dev_handle_t rm_dev_handle;
 
 void ina_init() {
-    ESP_ERROR_CHECK(i2c_master_get_bus_handle(I2C_NUM_0, &bus_handle));
-
-    i2c_device_config_t dev_cfg;
+    ESP_ERROR_CHECK(i2c_master_get_bus_handle(I2C_NUM_0, &bus_handle_0));
+    ESP_ERROR_CHECK(i2c_master_get_bus_handle(I2C_NUM_1, &bus_handle_1));
 
     // Configure ina devices
-    dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    dev_cfg.scl_speed_hz = 100000; // 100kHz
+    i2c_device_config_t dev_cfg_0;
+    dev_cfg_0.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_cfg_0.scl_speed_hz = 100000; // 100kHz
+    dev_cfg_0.device_address = INA219_LM_ADDR;
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle_0, &dev_cfg_0, &lm_dev_handle));
 
-    // dev_cfg.device_address = INA219_ESP_ADDR;
-    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &esp_dev_handle));
-
-    dev_cfg.device_address = INA219_LM_ADDR;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &lm_dev_handle));
-
-    // dev_cfg.device_address = INA219_RM_ADDR;
-    // ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &rm_dev_handle));
+    i2c_device_config_t dev_cfg_1;
+    dev_cfg_1.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_cfg_1.scl_speed_hz = 100000; // 100kHz
+    dev_cfg_1.device_address = INA219_RM_ADDR;
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle_1, &dev_cfg_1, &rm_dev_handle));
 }
 
 static void configure(i2c_master_dev_handle_t dev_handle) {
@@ -53,7 +53,7 @@ static void configure(i2c_master_dev_handle_t dev_handle) {
     ESP_ERROR_CHECK(i2c_master_transmit(dev_handle, write_buf, sizeof(write_buf), -1));
 }
 
-static ina_input_t read_ina(i2c_master_dev_handle_t dev_handle) {
+static single_ina_t read_ina(i2c_master_dev_handle_t dev_handle) {
     uint8_t write_buf[1];
     uint8_t read_buf[2];    
     uint16_t value;
@@ -78,45 +78,41 @@ static ina_input_t read_ina(i2c_master_dev_handle_t dev_handle) {
 
     // Read current
     // Ohm's law: I = V / R; R = 0.1Ω
-    float current = shunt_voltage / 0.1;
+    float current = shunt_voltage / 0.1; // in mA
 
-    ina_input_t ina;
+    single_ina_t ina;
     ina.voltage = bus_voltage;
-    ina.current = current;
-
-    ESP_LOGI(TAG, "Voltage=%.2f V, Current=%.2f mA", ina.voltage, ina.current);
+    ina.current = fabs(current / 1000);
 
     return ina;
 }
 
-static void send_uart(ina_input_t ina) {
-    uart_tx_message_t msg;
-    // send ina data to UART
-    msg.type = MSG_TYPE_INA;
-    msg.size = sizeof(ina);
-    memcpy(msg.payload, &ina, sizeof(ina));
-
-    if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGI(TAG, "Queue full\n");
-    }
-}
-
-void ina_task(void *param) {
-    uart_tx_queue = (QueueHandle_t)param;
-    
-    // configure(esp_dev_handle);
+void ina_task(void *param) {    
     configure(lm_dev_handle);
-    // configure(rm_dev_handle);
+    configure(rm_dev_handle);
 
     while (1) {
-        // ina_input_t esp_ina = read_ina(esp_dev_handle);
-        ina_input_t lm_ina = read_ina(lm_dev_handle);
-        // ina_input_t rm_ina = read_ina(rm_dev_handle);
+        single_ina_t lm_ina = read_ina(lm_dev_handle);
+        single_ina_t rm_ina = read_ina(rm_dev_handle);
 
-        // send_uart(esp_ina);
-        // send_uart(lm_ina);
-        // send_uart(rm_ina);
+        ESP_LOGI(TAG, "Left Voltage=%.2f V, Current=%.2f A", lm_ina.voltage, lm_ina.current);
+        ESP_LOGI(TAG, "Right Voltage=%.2f V, Current=%.2f A", rm_ina.voltage, rm_ina.current);
+        
+        ina_input_t ina;
+        ina.left_voltage = lm_ina.voltage;
+        ina.left_current = lm_ina.current;
+        ina.right_voltage = rm_ina.voltage;
+        ina.right_current = rm_ina.current;
 
-        vTaskDelay(500 / portTICK_PERIOD_MS); // 500 ms
+        // send ina data to UART
+        uart_tx_message_t msg;
+        msg.type = MSG_TYPE_INA;
+        memcpy(msg.payload, &ina, sizeof(ina));
+
+        if (xQueueSend(uart_tx_queue, &msg, portMAX_DELAY) != pdTRUE) {
+            ESP_LOGI(TAG, "Queue full\n");
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(INTERVAL_MS)); // 500 ms
     }
 }

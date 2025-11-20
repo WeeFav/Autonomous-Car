@@ -105,3 +105,9 @@ void disable_led(void)
     /* Set all LED off to clear all pixels */
     led_strip_clear(led_strip);
 }
+
+uint8_t mapToPercent(uint16_t value) {
+    if (value < 0) value = 0;
+    if (value > 1023) value = 1023;
+    return (value * 100) / 1023;    
+}
