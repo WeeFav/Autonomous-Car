@@ -39,7 +39,7 @@ int main(int argc, char** argv)
     pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
     sor.setInputCloud(cloud);
     sor.setMeanK(50);             // Number of neighbors to analyze
-    sor.setStddevMulThresh(0.3);  // Threshold: higher = less strict
+    sor.setStddevMulThresh(0.25);  // Threshold: higher = less strict
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);
     sor.filter(*cloud_filtered);
@@ -101,7 +101,7 @@ int main(int argc, char** argv)
         // OpenCV images have row = y, col = x, origin at top-left
         // Optional: flip y to have origin bottom-left
         int iy_flip = height - 1 - iy;
-        grid.at<int>(iy, ix) = 255;
+        grid.at<int>(iy, ix)++;
     }
 
     // 4. Normalize to 0-255
@@ -113,8 +113,9 @@ int main(int argc, char** argv)
 
     // 6. Show
     cv::Mat grid_resized;
-    cv::resize(grid_normalized, grid_resized, cv::Size(), 4.0, 4.0, cv::INTER_NEAREST);
+    cv::resize(grid_normalized, grid_resized, cv::Size(), 8.0, 8.0, cv::INTER_NEAREST);
     cv::imshow("Occupancy Grid", grid_resized);
+    cv::imwrite("../map.jpg", grid_resized);
     cv::waitKey(0);
 
     viewer->setBackgroundColor(0, 0, 0);
