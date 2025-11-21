@@ -11,92 +11,73 @@
 #include <opencv2/calib3d.hpp>
 #include <opencv2/highgui.hpp>
 
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+
 class VisualOdom {
 public:
     VisualOdom() {
         sift = cv::xfeatures2d::SIFT::create();
-        
         cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::KDTreeIndexParams>(5);
         cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(50);
         flann = cv::makePtr<cv::FlannBasedMatcher>(indexParams, searchParams);
+
+        K = ;
     }
 
-    void run() {
-        std::vector<cv::Point2d> gt_path;
-        std::vector<cv::Point2d> est_path;
-        std::vector<double> gt_scale;
-        std::vector<double> est_scale;
-        cv::Mat cur_pose;
+    cv::Point2d run(const cv::Mat &img, const int frame_idx) 
+    {
+        if (frame_idx == 0) 
+        {
+            sift->detectAndCompute(img, cv::noArray(), kp1, des1);
+            cv::Mat cur_pose = cv::Mat::eye(4, 4, CV_64F);
+        } 
+        else 
+        {
+            std::vector<cv::Point2f> pts1, pts2;
+            get_matches(img, pts1, pts2);
 
-        for (size_t i = 0; i < 1000 && i < images.size(); i++) {
-            cv::Mat gt_pose = gt_poses[i].clone();
+            cv::Mat R, t;
+            get_pose(pts1, pts2, R, t);
 
-            if (i == 0) {
-                cv::Mat img1 = cv::imread(images[0], cv::IMREAD_GRAYSCALE);
-                sift->detectAndCompute(img1, cv::noArray(), kp1, des1);
-                cur_pose = gt_pose;
-            } else {
-                cv::Mat img2 = cv::imread(images[i], cv::IMREAD_GRAYSCALE);
-                
-                std::vector<cv::Point2f> pts1, pts2;
-                get_matches(img2, pts1, pts2);
-
-                cv::Mat R, t;
-                get_pose(pts1, pts2, R, t);
-
-                double scale = get_scale(R, t, pts1, pts2);
-
-                double true_scale = cv::norm(gt_poses[i](cv::Range(0, 3), cv::Range(3, 4)) -
-                                             gt_poses[i - 1](cv::Range(0, 3), cv::Range(3, 4)));
-
-                
-                // construct unscaled relative transform betwen frames
-                cv::Mat T = cv::Mat::eye(4, 4, CV_64F);
-                R.copyTo(T(cv::Range(0, 3), cv::Range(0, 3)));
-                t.copyTo(T(cv::Range(0, 3), cv::Range(3, 4)));
-                T(cv::Range(0, 3), cv::Range(3, 4)) *= scale;
-
-                cur_pose = cur_pose * T.inv();
-
-                // Shift the cache: current becomes previous
-                kp1 = kp2;
-                des1 = des2.clone();
-                prev_points_3d = points_3d;
-
-                gt_scale.push_back(true_scale);
-                est_scale.push_back(scale);
-            }
-
-            gt_path.push_back(cv::Point2d(gt_pose.at<double>(0, 3), gt_pose.at<double>(2, 3)));
-            est_path.push_back(cv::Point2d(cur_pose.at<double>(0, 3), cur_pose.at<double>(2, 3)));
+            double scale = get_scale(R, t, pts1, pts2);
             
-            // Draw paths
-            drawPaths(i, gt_path, est_path);
+            // construct unscaled relative transform betwen frames
+            cv::Mat T = cv::Mat::eye(4, 4, CV_64F);
+            R.copyTo(T(cv::Range(0, 3), cv::Range(0, 3)));
+            t.copyTo(T(cv::Range(0, 3), cv::Range(3, 4)));
+            T(cv::Range(0, 3), cv::Range(3, 4)) *= scale;
+
+            cv::Mat cur_pose = prev_pose * T.inv();
+
+            // Shift the cache: current becomes previous
+            kp1 = kp2;
+            des1 = des2.clone();
+            prev_points_3d = points_3d;
         }
 
-        cv::waitKey(0);
-
+        return cv::Point2d(cur_pose.at<double>(0, 3), cur_pose.at<double>(2, 3));          
     }
 
+
 private:
-    std::vector<std::string> images;
     cv::Ptr<cv::xfeatures2d::SIFT> sift;
     cv::Ptr<cv::FlannBasedMatcher> flann;
-    std::vector<cv::Mat> gt_poses;
     cv::Mat K;
     std::vector<cv::KeyPoint> kp1, kp2;
     cv::Mat des1, des2;
-    int w = 1000, h = 1000;
-    cv::Mat canvas = cv::Mat::zeros(h, w, CV_8UC3);
     std::vector<cv::Point3f> prev_points_3d;
     std::vector<cv::Point3f> points_3d;
+    cv::Mat prev_pose;
 
-    // TCP
-    int listen_socket;
-
-    void get_matches(const cv::Mat &img2, std::vector<cv::Point2f> &pts1, std::vector<cv::Point2f> &pts2) {
+    void get_matches(const cv::Mat &img, std::vector<cv::Point2f> &pts1, std::vector<cv::Point2f> &pts2) {
         // Find the keypoints and descriptors
-        sift->detectAndCompute(img2, cv::noArray(), kp2, des2);
+        sift->detectAndCompute(img, cv::noArray(), kp2, des2);
 
         // Match frame 1-2
         std::vector<std::vector<cv::DMatch>> matches;
@@ -203,37 +184,64 @@ private:
         return scale;                
     }
 
-    void drawPaths(int i, const std::vector<cv::Point2d> &gt_path, const std::vector<cv::Point2d> &est_path) {
-        auto draw_path = [&](const std::vector<cv::Point2d> &path, const cv::Scalar &color) {
-            cv::line(canvas,
-                    cv::Point(int(w/2 + path[path.size() - 2].x*1), int(h/2 - path[path.size() - 2].y*1)),
-                    cv::Point(int(w/2 + path[path.size() - 1].x*1), int(h/2 - path[path.size() - 1].y*1)),
-                    color, 2);
-        };
-
-        draw_path(gt_path, cv::Scalar(0, 255, 0));
-        draw_path(est_path, cv::Scalar(0, 0, 255));
-        
-        cv::Mat display;
-        canvas.copyTo(display);  // copy current canvas
-        cv::putText(display, std::to_string(i), cv::Point(20, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255,255,255));
-        cv::imshow("VO Path", display);
-        cv::waitKey(1);    
-    }
-
 };
 
+bool send_all(int sock, const void *data, size_t size) {
+    const char *ptr = (const char*)data;
+    while (size > 0) {
+        ssize_t sent = send(sock, ptr, size, 0);
+        if (sent <= 0) return false; // Connection lost or error
+        ptr += sent;
+        size -= sent;
+    }
+    return true;
+}
+
 int main() {
-    // VisualOdom vo();
-    // vo.run();
+    // ---------- TCP SERVER ----------
+    int listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_socket == -1) {
+        std::cerr << "Socket creation failed.\n";
+        return 1;
+    }
+    
+    // bind listening socket to server ip and port
+    sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(8000);
+    if (bind(listen_socket, (sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+        std::cerr << "Bind failed.\n";
+        close(listen_socket);
+        return 1;
+    }
+    
+    // tell the socket is for listening
+    listen(listen_socket, SOMAXCONN);
+
+    // define client ip and port structure
+    sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    // wait for connection
+    int sock = accept(listen_socket, (sockaddr*)&client_addr, &client_len);
+    if (sock == -1) {
+        std::cerr << "Accept failed.\n";
+        close(listen_socket);
+        return 1;
+    }
+    
+    // close listening socket (don't recieve other clients)
+    close(listen_socket);
+
+    // ---------- VO ----------
+    VisualOdom vo();
+    std::vector<cv::Point2d> est_path;
 
     // GStreamer pipeline string for the Raspberry Pi camera on Jetson Nano
     std::string pipeline = "nvarguscamerasrc sensor-id=0 ! "
                            "video/x-raw(memory:NVMM), width=1640, height=1232, format=NV12, framerate=30/1 ! "
                            "nvvidconv flip-method=2 ! "
-                           "video/x-raw, format=BGRx ! "
-                           "videoconvert ! "
-                           "video/x-raw, format=BGR ! appsink";
+                           "video/x-raw, format=GRAY8 ! appsink";
 
     // OpenCV video capture object
     cv::VideoCapture cap(pipeline, cv::CAP_GSTREAMER);
@@ -242,22 +250,35 @@ int main() {
         return -1;
     }
 
-    cv::Mat frame;
-    int counter = 0;
+    int frame_idx = 0;
+    
     while (true) {
-        // read image
+        cv::Mat frame;
         cap >> frame;
         if (frame.empty()) {
             std::cerr << "Error: Blank frame grabbed." << std::endl;
             break;
         }
 
-        cv::Mat resized;
-        cv::resize(frame, resized, cv::Size(640, 480), 0, 0, cv::INTER_LINEAR);
-        
-        std::cout << "Frame " << std::to_string(counter) << std::endl;
-        counter++;
-    }
+        std::cout << "Frame " << std::to_string(frame_idx) << std::endl;
 
+        cv::Point2d pose;
+        pose = vo.run(frame, frame_idx);
+        est_path.push_back(pose);
+
+        // Encode image as JPEG
+        std::vector<uchar> buf;
+        std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 70}; // adjust quality
+        cv::imencode(".jpg", frame, buf, params);
+
+        uint32_t img_size = buf.size();
+        uint32_t img_size_net = htonl(img_size);
+        if (!send_all(sock, &img_size_net, sizeof(img_size_net))) break;
+        if (!send_all(sock, buf.data(), img_size)) break;
+        if (!send_all(sock, &pose, sizeof(pose))) break;
+        
+        frame_idx++;
+    }
+    close(sock);
     return 0;
 }
