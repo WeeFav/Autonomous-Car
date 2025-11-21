@@ -22,20 +22,30 @@
 class VisualOdom {
 public:
     VisualOdom() {
-        sift = cv::xfeatures2d::SIFT::create();
-        cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::KDTreeIndexParams>(5);
-        cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(50);
+        orb = cv::ORB::create();
+        cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::LshIndexParams>(12, 20, 2);
+        cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(50);        
         flann = cv::makePtr<cv::FlannBasedMatcher>(indexParams, searchParams);
 
-        K = ;
+        double fx = 651.3584644989045;
+        double fy = 870.2541054486668;
+        double cx = 328.3739555076033;
+        double cy = 242.0301802544854;
+
+        K = (cv::Mat_<double>(3,3) <<
+                    fx, 0.0, cx,
+                    0.0, fy, cy,
+                    0.0, 0.0, 1.0);
     }
 
     cv::Point2d run(const cv::Mat &img, const int frame_idx) 
     {
+        cv::Mat cur_pose;
+
         if (frame_idx == 0) 
         {
-            sift->detectAndCompute(img, cv::noArray(), kp1, des1);
-            cv::Mat cur_pose = cv::Mat::eye(4, 4, CV_64F);
+            orb->detectAndCompute(img, cv::noArray(), kp1, des1);
+            cur_pose = cv::Mat::eye(4, 4, CV_64F);
         } 
         else 
         {
@@ -43,6 +53,7 @@ public:
             get_matches(img, pts1, pts2);
 
             cv::Mat R, t;
+
             get_pose(pts1, pts2, R, t);
 
             double scale = get_scale(R, t, pts1, pts2);
@@ -53,7 +64,7 @@ public:
             t.copyTo(T(cv::Range(0, 3), cv::Range(3, 4)));
             T(cv::Range(0, 3), cv::Range(3, 4)) *= scale;
 
-            cv::Mat cur_pose = prev_pose * T.inv();
+            cur_pose = prev_pose * T.inv();
 
             // Shift the cache: current becomes previous
             kp1 = kp2;
@@ -61,12 +72,14 @@ public:
             prev_points_3d = points_3d;
         }
 
+        prev_pose = cur_pose.clone();
+
         return cv::Point2d(cur_pose.at<double>(0, 3), cur_pose.at<double>(2, 3));          
     }
 
 
 private:
-    cv::Ptr<cv::xfeatures2d::SIFT> sift;
+    cv::Ptr<cv::ORB> orb;
     cv::Ptr<cv::FlannBasedMatcher> flann;
     cv::Mat K;
     std::vector<cv::KeyPoint> kp1, kp2;
@@ -77,7 +90,7 @@ private:
 
     void get_matches(const cv::Mat &img, std::vector<cv::Point2f> &pts1, std::vector<cv::Point2f> &pts2) {
         // Find the keypoints and descriptors
-        sift->detectAndCompute(img, cv::noArray(), kp2, des2);
+        orb->detectAndCompute(img, cv::noArray(), kp2, des2);
 
         // Match frame 1-2
         std::vector<std::vector<cv::DMatch>> matches;
@@ -206,6 +219,9 @@ int main() {
     }
     
     // bind listening socket to server ip and port
+    int opt = 1;
+    setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
     sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -218,12 +234,14 @@ int main() {
     
     // tell the socket is for listening
     listen(listen_socket, SOMAXCONN);
+    std::cout << "Waiting for connection..." << std::endl;
 
     // define client ip and port structure
     sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     // wait for connection
     int sock = accept(listen_socket, (sockaddr*)&client_addr, &client_len);
+    std::cout << "Client connected" << std::endl;
     if (sock == -1) {
         std::cerr << "Accept failed.\n";
         close(listen_socket);
@@ -234,14 +252,16 @@ int main() {
     close(listen_socket);
 
     // ---------- VO ----------
-    VisualOdom vo();
+    VisualOdom vo;
     std::vector<cv::Point2d> est_path;
 
     // GStreamer pipeline string for the Raspberry Pi camera on Jetson Nano
     std::string pipeline = "nvarguscamerasrc sensor-id=0 ! "
-                           "video/x-raw(memory:NVMM), width=1640, height=1232, format=NV12, framerate=30/1 ! "
+                           "video/x-raw(memory:NVMM), width=640, height=480, format=NV12, framerate=30/1 ! "
                            "nvvidconv flip-method=2 ! "
-                           "video/x-raw, format=GRAY8 ! appsink";
+                           "video/x-raw, format=BGRx ! "
+                           "videoconvert ! "
+                           "video/x-raw, format=BGR ! appsink";
 
     // OpenCV video capture object
     cv::VideoCapture cap(pipeline, cv::CAP_GSTREAMER);
@@ -251,6 +271,8 @@ int main() {
     }
 
     int frame_idx = 0;
+
+    std::cout << "Starting..." << std::endl;
     
     while (true) {
         cv::Mat frame;
@@ -262,14 +284,17 @@ int main() {
 
         std::cout << "Frame " << std::to_string(frame_idx) << std::endl;
 
+        cv::Mat gray;
+        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+
         cv::Point2d pose;
-        pose = vo.run(frame, frame_idx);
+        pose = vo.run(gray, frame_idx);
         est_path.push_back(pose);
 
         // Encode image as JPEG
         std::vector<uchar> buf;
         std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 70}; // adjust quality
-        cv::imencode(".jpg", frame, buf, params);
+        cv::imencode(".jpg", gray, buf, params);
 
         uint32_t img_size = buf.size();
         uint32_t img_size_net = htonl(img_size);
@@ -279,6 +304,7 @@ int main() {
         
         frame_idx++;
     }
+    cap.release();
     close(sock);
     return 0;
 }
